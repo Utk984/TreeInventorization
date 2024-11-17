@@ -140,9 +140,8 @@ def detect_trees(image_path):
     original_height, original_width = original_img.shape[:2]
     img_paths_with_angles = create_images(image_path, 90, 0, 720, 1080)
 
-    # Predict tree locations on perspective images
     results = model.predict(
-        [img for img, _ in img_paths_with_angles], conf=0.01, save=True
+        [img for img, _ in img_paths_with_angles], conf=0.1, save=True
     )
 
     box_coords = []

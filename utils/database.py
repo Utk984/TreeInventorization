@@ -1,17 +1,22 @@
+import os
+
 import psycopg2
+from dotenv import load_dotenv
 from psycopg2 import sql
+
+# Load the .env file
+load_dotenv()
 
 
 class Database:
     def __init__(self):
         # Database connection URL
-        DB_URL = "postgresql://utkarsh:uOphh5OzXd7N1aDrLWGtvD9gmN8DFWxN@dpg-csfl7aogph6c73f4h5m0-a.oregon-postgres.render.com/treeinv"
+        DB_URL = os.getenv("DB_URL")
 
         # Establish connection to the database
         try:
             self.conn = psycopg2.connect(DB_URL)
             self.cur = self.conn.cursor()
-            print("Database connection successful.")
         except Exception as e:
             print(f"Error connecting to database: {e}")
 
@@ -95,13 +100,11 @@ class Database:
                 ),
             )
             self.conn.commit()
-            print("Annotation inserted successfully.")
         except Exception as e:
             print(e)
             self.conn.rollback()
 
     def load_saved(self):
-
         query = sql.SQL("SELECT lat, lng, lat_offset, lng_offset FROM tree_details;")
 
         try:

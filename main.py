@@ -1,3 +1,5 @@
+import os
+
 from treemodel.detect import detect_trees
 from utils.database import Database
 from utils.utils import (calculate, get_panorama_id, move_in_heading,
@@ -54,7 +56,6 @@ def handle_model_output(
 
 
 def collect_panoramic_data_within_radius(lat, lon, radius=0.05, step_distance=0.01):
-    panoramic_data = {}
     headings = range(0, 360, 30)
     box_coords = []
 
@@ -64,7 +65,7 @@ def collect_panoramic_data_within_radius(lat, lon, radius=0.05, step_distance=0.
 
         while distance_moved <= radius:
             pano_id = get_panorama_id(current_lat, current_lon)
-            if pano_id is not None:
+            if not os.path.exists(f"./panoramas/{pano_id}.jpg") and pano_id is not None:
                 panorma, depth_map, heading_degrees, pano_lat, pano_lon, pano_id = (
                     process_location(current_lat, current_lon)
                 )
@@ -101,11 +102,12 @@ def collect_panoramic_data_within_radius(lat, lon, radius=0.05, step_distance=0.
 
                 print("3. Saved annotations")
 
-                current_lat, current_lon = move_in_heading(
-                    current_lat, current_lon, heading, step_distance
-                )
-                distance_moved += step_distance
+            current_lat, current_lon = move_in_heading(
+                current_lat, current_lon, heading, step_distance
+            )
+            distance_moved += step_distance
 
 
-lat, lon = 30.71979998667062, 76.72142742674824
+# lat, lon = 30.71979998667062, 76.72142742674824
+lat, lon = 43.644157832726854, -79.39373552799226
 collect_panoramic_data_within_radius(lat, lon, radius=0.05)

@@ -92,5 +92,4 @@ def process_location(lat, long):
     heading_degrees = degrees(pano.heading)
     if pano.depth:
         depth_map = pano.depth.data
-    streetview.download_panorama(pano, f"{pano.id}.jpg")
     return panorma, depth_map, heading_degrees, pano.lat, pano.lon, pano_id
