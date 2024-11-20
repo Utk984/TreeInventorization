@@ -7,8 +7,22 @@ from psycopg2 import sql
 # Load the .env file
 load_dotenv()
 
+
 # External function to call database and save annotations
-def save_annotations(path, panorama_id, lat, lng, tree_lat, tree_lng, image_x, image_y):
+def save_annotations(
+    path,
+    panorama_id,
+    lat,
+    lng,
+    tree_lat,
+    tree_lng,
+    image_x,
+    image_y,
+    species,
+    common_name,
+    description,
+    theta,
+):
     db = Database()
     db.insert_annotation(
         image_path=path,
@@ -23,6 +37,10 @@ def save_annotations(path, panorama_id, lat, lng, tree_lat, tree_lng, image_x, i
         image_y=image_y,
         height=0,
         diameter=0,
+        species=species,  # New feature
+        common_name=common_name,  # New feature
+        description=description,  # New feature
+        theta=theta,
     )
     db.close()
 
@@ -84,6 +102,10 @@ class Database:
         image_y=None,
         height=None,
         diameter=None,
+        species=None,
+        common_name=None,
+        description=None,
+        theta=None,  # New parameter
     ):
         image_id = self.get_or_create_streetview_image(
             pano_id, image_path, stview_lat, stview_lng
@@ -95,12 +117,12 @@ class Database:
 
         insert_query = sql.SQL(
             """
-            INSERT INTO tree_details (
-                image_id, lat, lng, lat_offset, lng_offset, image_x, image_y, annotator_name, height, diameter
-            ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-            )
-            """
+                INSERT INTO tree_details (
+                    image_id, lat, lng, lat_offset, lng_offset, image_x, image_y, annotator_name, height, diameter, species, common_name, description, theta
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                """
         )
         try:
             self.cur.execute(
@@ -116,6 +138,10 @@ class Database:
                     "Model",
                     height,
                     diameter,
+                    species,
+                    common_name,
+                    description,
+                    theta,
                 ),
             )
             self.conn.commit()

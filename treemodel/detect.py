@@ -4,6 +4,8 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
+from treemodel.gemini import get_species
+
 model = YOLO("./treemodel/train/weights/best.pt")
 
 
@@ -126,26 +128,44 @@ def map_perspective_point_to_original(
 
 def create_images(image_path, FOV, phi, height, width):
     equ = Equirectangular(image_path)
-    os.makedirs("perspectives", exist_ok=True)
+    os.makedirs("./images/perspectives", exist_ok=True)
     images_with_angles = []
-    for theta in [-90, 90]:
+    img_paths = []
+    for theta in [-90, 0, 90]:
         img = equ.GetPerspective(FOV, theta, phi, height, width)
         images_with_angles.append((img, theta))
-        cv2.imwrite(f"./perspectives/perspective_image_{theta}.jpg", img)
+        path = f"./images/perspectives/perspective_image_{theta}.jpg"
+        cv2.imwrite(path, img)
     return images_with_angles
 
 
-def detect_trees(image_path):
+def detect_trees(image_path, lat, lon):
     original_img = cv2.imread(image_path)
     original_height, original_width = original_img.shape[:2]
     img_paths_with_angles = create_images(image_path, 90, 0, 720, 1080)
 
     results = model.predict(
-        [img for img, _ in img_paths_with_angles], conf=0.1, save=True
+        [img for img, _ in img_paths_with_angles],
+        conf=0.1,
     )
 
+    pano_id = image_path.split("/")[-1].split(".")[0]
+
     box_coords = []
+    species = []
+    common_names = []
+    descriptions = []
     for result, (_, theta) in zip(results, img_paths_with_angles):
+        path = f"./images/predict/{pano_id}_{theta}"
+
+        result.save_crop(save_dir=path)
+
+        if len(result.boxes) > 0:
+            spec, common, desc = get_species(path, lat, lon)
+            species.extend(spec)
+            common_names.extend(common)
+            descriptions.extend(desc)
+
         for box in result.boxes:
             x_min, _, x_max, y_max = box.xyxy[0].tolist()
             perspective_x = (x_min + x_max) / 2
@@ -165,8 +185,11 @@ def detect_trees(image_path):
 
             box_coords.append((original_x, original_y, theta))
 
-    result = model.predict(image_path, conf=0.01, save=True)
-
-    os.system("rm -rf perspectives")
-
-    return box_coords, original_width, original_height
+    return (
+        box_coords,
+        species,
+        common_names,
+        descriptions,
+        original_width,
+        original_height,
+    )
