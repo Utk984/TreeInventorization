@@ -109,7 +109,7 @@ def download_panorama_image_and_depth(pano_id):
     pano = streetview.find_panorama_by_id(pano_id, download_depth=True)
     # panorama_path = f"data/Panormas/{pano.id}_panorma.jpg"
     panorma = streetview.get_panorama(pano, zoom=5)
-    streetview.download_panorama(pano, f"./panoramas/{pano.id}.jpg")
+    streetview.download_panorama(pano, f"./images/panoramas/{pano.id}.jpg")
     return panorma, pano
 
 

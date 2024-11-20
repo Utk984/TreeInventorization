@@ -7,8 +7,21 @@ from psycopg2 import sql
 # Load the .env file
 load_dotenv()
 
+
 # External function to call database and save annotations
-def save_annotations(path, panorama_id, lat, lng, tree_lat, tree_lng, image_x, image_y):
+def save_annotations(
+    path,
+    panorama_id,
+    lat,
+    lng,
+    tree_lat,
+    tree_lng,
+    image_x,
+    image_y,
+    species,
+    common_name,
+    description,
+):
     db = Database()
     db.insert_annotation(
         image_path=path,
@@ -23,6 +36,9 @@ def save_annotations(path, panorama_id, lat, lng, tree_lat, tree_lng, image_x, i
         image_y=image_y,
         height=0,
         diameter=0,
+        species=species,  # New feature
+        common_name=common_name,  # New feature
+        description=description,  # New feature
     )
     db.close()
 
@@ -84,6 +100,9 @@ class Database:
         image_y=None,
         height=None,
         diameter=None,
+        species=None,
+        common_name=None,
+        description=None,
     ):
         image_id = self.get_or_create_streetview_image(
             pano_id, image_path, stview_lat, stview_lng
@@ -96,9 +115,9 @@ class Database:
         insert_query = sql.SQL(
             """
             INSERT INTO tree_details (
-                image_id, lat, lng, lat_offset, lng_offset, image_x, image_y, annotator_name, height, diameter
+                image_id, lat, lng, lat_offset, lng_offset, image_x, image_y, annotator_name, height, diameter, species, common_name, description
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             """
         )
@@ -116,6 +135,9 @@ class Database:
                     "Model",
                     height,
                     diameter,
+                    species,
+                    common_name,
+                    description,
                 ),
             )
             self.conn.commit()

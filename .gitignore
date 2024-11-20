@@ -1,6 +1,7 @@
 *.pyc
 
 # our own ignore files
+images/panoramas
 .DS_Store
 __pycache__/
 utils/__pycache__/
