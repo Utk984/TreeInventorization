@@ -4,6 +4,36 @@ from math import asin, atan2, cos, degrees, radians, sin
 from streetlevel import streetview
 
 
+def handle_model_output(
+    image_x,
+    image_y,
+    theta,
+    depth,
+    heading,
+    image_width,
+    image_height,
+    image_lat,
+    image_lng,
+):
+    distance, direction, depth = calculate(
+        image_x,
+        image_y,
+        abs(theta - 90),
+        0,
+        depth,
+        image_width,
+        image_height,
+        heading,
+    )
+
+    if depth > 0 and distance > 0:
+        lat, lng = move_in_heading(
+            image_lat, image_lng, int(direction), distance / 1000
+        )
+        return lat, lng
+    return None, None
+
+
 def calculate_distance_and_direction(depth, pitch, yaw, heading):
     distance = depth * math.sin((180 - pitch) / 360)
     direction = yaw - 270 + heading

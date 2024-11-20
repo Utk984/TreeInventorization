@@ -7,6 +7,25 @@ from psycopg2 import sql
 # Load the .env file
 load_dotenv()
 
+# External function to call database and save annotations
+def save_annotations(path, panorama_id, lat, lng, tree_lat, tree_lng, image_x, image_y):
+    db = Database()
+    db.insert_annotation(
+        image_path=path,
+        pano_id=panorama_id,
+        stview_lat=lat,
+        stview_lng=lng,
+        tree_lat=tree_lat,
+        tree_lng=tree_lng,
+        lat_offset=0,
+        lng_offset=0,
+        image_x=image_x,
+        image_y=image_y,
+        height=0,
+        diameter=0,
+    )
+    db.close()
+
 
 class Database:
     def __init__(self):
