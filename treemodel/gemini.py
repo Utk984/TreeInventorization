@@ -39,10 +39,13 @@ def get_species(image_path, lat, lon):
         try:
             # Extract JSON text
             json_text = response_dict["candidates"][0]["content"]["parts"][0]["text"]
+            print("json text extracted")
             cleaned_json_text = json_text.strip("```json").strip("```").strip()
+            print("cleaned json text extracted")
 
             # Parse the cleaned JSON string
             tree_data = json.loads(cleaned_json_text)
+            print("tree data extracted")
 
             species_list.append(tree_data.get("name"))
             common_names_list.append(tree_data.get("common_name"))
