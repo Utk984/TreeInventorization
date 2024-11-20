@@ -27,7 +27,6 @@ def collect_panoramic_data_within_square(lat, lon, radius=0.05, step_distance=0.
     min_lon = lon - radius
     max_lon = lon + radius
 
-
     num_images = 0
 
     # Iterate over the grid within the square box
@@ -40,7 +39,9 @@ def collect_panoramic_data_within_square(lat, lon, radius=0.05, step_distance=0.
 
             # Process each grid point
             pano_id = get_panorama_id(current_lat, current_lon)
-            if pano_id is not None: # and not os.path.exists(f"./images/panoramas/{pano_id}.jpg"):
+            if (
+                pano_id is not None
+            ):  # and not os.path.exists(f"./images/panoramas/{pano_id}.jpg"):
                 num_images += 1
                 # Process the location and get panorama data
                 panorama, depth_map, heading_degrees, pano_lat, pano_lon, pano_id = (
@@ -50,7 +51,9 @@ def collect_panoramic_data_within_square(lat, lon, radius=0.05, step_distance=0.
                 print("1. Processing location: ", current_lat, current_lon)
 
                 # Detect trees in the panorama
-                box_coords, species, common_names, descriptions, width, height = detect_trees(f"./images/panoramas/{pano_id}.jpg", lat, lon)
+                box_coords, species, common_names, descriptions, width, height = (
+                    detect_trees(f"./images/panoramas/{pano_id}.jpg", lat, lon)
+                )
 
                 print("2. Detected trees: ", len(box_coords))
 
@@ -70,17 +73,18 @@ def collect_panoramic_data_within_square(lat, lon, radius=0.05, step_distance=0.
                     # Optional: Save annotations with new data (species, common names, descriptions)
                     if lat is not None and lng is not None:
                         save_annotations(
-                            f"./panoramas/{pano_id}.jpg",
-                            pano_id,
-                            pano_lat,
-                            pano_lon,
-                            lat,
-                            lng,
-                            x,
-                            y,
-                            species[idx],         # Save species info
-                            common_names[idx],    # Save common name
-                            descriptions[idx]     # Save description
+                            path="./panoramas/pano_id.jpg",
+                            panorama_id=pano_id,
+                            lat=pano_lat,
+                            lng=pano_lon,
+                            tree_lat=lat,
+                            tree_lng=lng,
+                            image_x=x,
+                            image_y=y,
+                            species=species[idx],
+                            common_name=common_names[idx],
+                            description=descriptions[idx],
+                            theta=theta,  # Pass theta value
                         )
                         print("3. Saved annotations")
 
@@ -92,7 +96,6 @@ def collect_panoramic_data_within_square(lat, lon, radius=0.05, step_distance=0.
 
     print("\n\n\nFinished processing!!")
     print(f"Processed {num_images} images")
-
 
 
 def main():

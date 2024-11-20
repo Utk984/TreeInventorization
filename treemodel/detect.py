@@ -185,10 +185,6 @@ def detect_trees(image_path, lat, lon):
 
             box_coords.append((original_x, original_y, theta))
 
-    # result = model.predict(image_path, conf=0.01, save=True)
-
-    # os.system("rm -rf perspectives")
-
     return (
         box_coords,
         species,

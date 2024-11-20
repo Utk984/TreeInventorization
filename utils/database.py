@@ -21,6 +21,7 @@ def save_annotations(
     species,
     common_name,
     description,
+    theta,
 ):
     db = Database()
     db.insert_annotation(
@@ -39,6 +40,7 @@ def save_annotations(
         species=species,  # New feature
         common_name=common_name,  # New feature
         description=description,  # New feature
+        theta=theta,
     )
     db.close()
 
@@ -103,6 +105,7 @@ class Database:
         species=None,
         common_name=None,
         description=None,
+        theta=None,  # New parameter
     ):
         image_id = self.get_or_create_streetview_image(
             pano_id, image_path, stview_lat, stview_lng
@@ -114,12 +117,12 @@ class Database:
 
         insert_query = sql.SQL(
             """
-            INSERT INTO tree_details (
-                image_id, lat, lng, lat_offset, lng_offset, image_x, image_y, annotator_name, height, diameter, species, common_name, description
-            ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-            )
-            """
+                INSERT INTO tree_details (
+                    image_id, lat, lng, lat_offset, lng_offset, image_x, image_y, annotator_name, height, diameter, species, common_name, description, theta
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                """
         )
         try:
             self.cur.execute(
@@ -138,6 +141,7 @@ class Database:
                     species,
                     common_name,
                     description,
+                    theta,
                 ),
             )
             self.conn.commit()
