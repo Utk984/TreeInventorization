@@ -1,6 +1,10 @@
 *.pyc
 
 # our own ignore files
+cache/
+data/
+images/
+utils1/
 images/panoramas
 images/predict
 .DS_Store

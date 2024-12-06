@@ -1,4 +1,24 @@
-opencv-python
-ultralytics
+# general
+numpy
+pandas
+matplotlib
 python-dotenv
+
+# image manipulation
+opencv-python
+pillow
+
+# postgres database
+psycopg2-binary
+
+# streetview images
+streetlevel
+
+# YOLO, tree segmentation/detection model
+ultralytics
+
+# for gemini flash model
 google-generativeai
+
+# for aws
+boto3
