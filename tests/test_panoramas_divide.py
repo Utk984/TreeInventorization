@@ -17,7 +17,7 @@ from pipeline.segmentation import detect_trees
 from pipeline.species_detection import get_species
 from pipeline.unwrapping import divide_panorama
 from utils.database import Database
-from utils.image_actions import make_tree_image
+from utils.image_utils import make_tree_image
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 

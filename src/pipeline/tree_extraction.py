@@ -2,7 +2,7 @@
 Extract tree latlon from image
 """
 
-from utils.image_actions import map_perspective_point_to_original, pano_depth2latlon
+from utils.image_utils import map_perspective_point_to_original, pano_depth2latlon
 
 
 def image2latlon(box, theta, pano):

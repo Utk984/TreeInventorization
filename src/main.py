@@ -8,15 +8,15 @@ import google.generativeai as genai
 import pandas as pd
 from streetlevel import streetview
 
-from src.config import Config
-from src.pipeline.cloud_storage import cloud_save_image
-from src.pipeline.database import Database
-from src.pipeline.segmentation import detect_trees
-from src.pipeline.species_detection import get_species
-from src.pipeline.tree_extraction import image2latlon
-from src.pipeline.unwrapping import divide_panorama
-from src.utils.batch_processing import batch_process
-from src.utils.image_utils import make_tree_image
+from config import Config
+from pipeline.cloud_storage import cloud_save_image
+from pipeline.database import Database
+from pipeline.segmentation import detect_trees
+from pipeline.species_detection import get_species
+from pipeline.tree_extraction import image2latlon
+from pipeline.unwrapping import divide_panorama
+from utils.batch_processing import batch_process
+from utils.image_utils import make_tree_image
 
 
 def process_panorama_batch(config):
