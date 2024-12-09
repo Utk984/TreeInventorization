@@ -88,7 +88,7 @@ def pano_depth2latlon(orig_point, pano, theta):
         pano.heading,
     )
 
-    if depth > 0 and distance > 0:
+    if depth >= 0 and distance >= 0:
         lat, lng = move_in_heading(pano.lat, pano.lon, int(direction), distance / 1000)
         return lat, lng
     return None, None

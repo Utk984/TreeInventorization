@@ -7,9 +7,10 @@ import boto3
 import google.generativeai as genai
 import pandas as pd
 from streetlevel import streetview
+from tqdm import tqdm
 
 from config import Config
-from pipeline.cloud_storage import cloud_save_image
+from pipeline.cloud_storage import cloud_save_image, local_save_image
 from pipeline.database import Database
 from pipeline.segmentation import detect_trees
 from pipeline.species_detection import get_species
@@ -28,6 +29,11 @@ def process_panorama_batch(config):
 
     # Load panoramas from CSV
     panoramas = pd.read_csv(config.PANORAMA_CSV)
+
+    start_row = 2240
+
+    # use panoramas df from start row onwards
+    panoramas = panoramas.iloc[start_row:]
     print(f"Total panoramas to process: {len(panoramas)}")
 
     # Model and AWS S3 initialization
@@ -52,7 +58,7 @@ def process_panorama_batch(config):
         print("Connecting to the database...")
         batch_trees = 0
 
-        for _, row in batch.iterrows():
+        for _, row in tqdm(batch.iterrows(), total=len(batch)):
             pano_id = row["pano_id"]
 
             try:
@@ -79,9 +85,10 @@ def process_panorama_batch(config):
 
                             # 4. Save tree image to cloud storage bucket
                             image_path = f"{pano.id}_view{i}_tree{j}_box{k}.jpg"
-                            cloud_save_image(
-                                im, image_path, s3, config.CLOUD_STORAGE_BUCKET
-                            )
+                            # cloud_save_image(
+                            #     im, image_path, s3, config.CLOUD_STORAGE_BUCKET
+                            # )
+                            local_save_image(im, config.OUTPUT_DIR, image_path)
 
                             # 5. Get lat long of tree from its image
                             lat, lon, orig_point = image2latlon(box, theta, pano)
@@ -119,7 +126,9 @@ def process_panorama_batch(config):
                             batch_trees += 1
 
                         except Exception as e:
-                            print(f"Error processing tree {k} in view {i}: {e}")
+                            print(
+                                f"{pano_id}: Error processing tree {k} in view {i}: {e}"
+                            )
                             continue
 
             total_panos_processed += 1

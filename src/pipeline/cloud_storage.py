@@ -22,3 +22,11 @@ def cloud_save_image(im, image_path, s3, bucket_name):
             # "ACL": "bucket-owner-full-control",
         },  # Set content type
     )
+
+def local_save_image(im, image_dir, image_path):
+    """
+    Save image to local storage
+    """
+
+    cv2.imwrite(f"{image_dir}/{image_path}", im)
+    # print(f"Saved image to {image_path}")

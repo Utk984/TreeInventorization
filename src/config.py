@@ -16,7 +16,7 @@ class Config:
         self.BASE_DIR = os.path.dirname(os.path.abspath(__file__))
         self.DATA_DIR = os.path.join(self.BASE_DIR, "../data")
         self.INPUT_DIR = os.path.join(self.DATA_DIR, "input")
-        self.OUTPUT_DIR = os.path.join(self.DATA_DIR, "output")
+        self.OUTPUT_DIR = os.path.join(self.DATA_DIR, "images/tree")
         self.LOG_FILE = os.path.join(self.DATA_DIR, "logs", "pipeline.log")
 
         # Panorama configuration
