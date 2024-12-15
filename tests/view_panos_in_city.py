@@ -4,7 +4,7 @@ import streamlit as st
 from streamlit_folium import st_folium
 
 # File containing panorama data
-CSV_FILE = "chandigarh_panoramas.csv"
+CSV_FILE = "./data/input/cdg_st_v3_28_29_panoramas.csv"
 
 
 def load_panoramas_from_csv(filename):

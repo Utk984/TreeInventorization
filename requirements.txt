@@ -20,5 +20,8 @@ ultralytics
 # for gemini flash model
 google-generativeai
 
+# for openai gpt-4o-mini
+openai
+
 # for aws
 boto3
