@@ -1,3 +1,6 @@
+import csv
+import os
+
 import psycopg2
 from psycopg2 import sql
 
@@ -124,3 +127,41 @@ class Database:
             self.cur.close()
         if self.conn:
             self.conn.close()
+
+
+def save_to_csv(trees, csv_file):
+    """
+    Append new panoramas to a CSV file.
+    For testing purposes, when we dont really want to store in the db
+    """
+
+    file_exists = os.path.exists(csv_file)
+    fieldnames = [
+        "image_path",
+        "pano_id",
+        "stview_lat",
+        "stview_lng",
+        "tree_lat",
+        "tree_lng",
+        "lat_offset",
+        "lng_offset",
+        "image_x",
+        "image_y",
+        "height",
+        "diameter",
+        "gem_species",
+        "gem_common_name",
+        "gem_description",
+        "gpt_species",
+        "gpt_common_name",
+        "gpt_description",
+        "theta",
+        "address",
+        "elevation",
+        "heading",
+    ]
+    with open(csv_file, mode="a", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(trees)
