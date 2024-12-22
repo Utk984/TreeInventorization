@@ -159,6 +159,7 @@ def save_to_csv(trees, csv_file):
         "address",
         "elevation",
         "heading",
+        "conf",
     ]
     with open(csv_file, mode="a", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=fieldnames)

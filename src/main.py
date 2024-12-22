@@ -133,6 +133,7 @@ def process_panorama_batch(config):
                                 "address": row["address"],
                                 "elevation": row["elevation"],
                                 "heading": row["heading"],
+                                "conf": box.conf,
                             }
                             save_to_csv(tree, config.STREET_OUTPUT_CSV)
                             # db.insert_annotation(

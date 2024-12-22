@@ -80,7 +80,7 @@ def interpolate_points(lat1, lon1, lat2, lon2, stride):
 
 def find_panoramas_on_street(start_point, end_point, search_radius, existing_panos):
     """Find panoramas along a straight street given its start and end points."""
-    stride = 0.00025  # Approx. 25 meters, adjust based on precision needed
+    stride = 0.000125  # Approx. 25 meters, adjust based on precision needed
     # stride = 0.1
     panoramas = []
 
@@ -92,7 +92,7 @@ def find_panoramas_on_street(start_point, end_point, search_radius, existing_pan
     print(f"Interpolated {len(street_points)} points along the street.")
     # print(street_points)
 
-    # return panoramas
+
 
     count = 0
     for lat, lon in street_points:
@@ -140,10 +140,10 @@ def find_panoramas_on_street(start_point, end_point, search_radius, existing_pan
 
 
 def main():
-    # Example usage
-    # Replace with actual coordinates and parameters
-    start_point = (30.710973905954493, 76.80092800043607)
-    end_point = (30.716201113211884, 76.79570430226612)
+    # start_point = (30.710973905954493, 76.80092800043607) # one side of the street
+    # end_point = (30.716201113211884, 76.79570430226612)
+    start_point = (30.71087966908076, 76.80085987445511) # other side of the street
+    end_point = (30.71611107669156, 76.7955354417566)
     search_radius = 50  # Search radius in meters
 
     print(f"Loading existing panoramas from {CSV_FILE}...")

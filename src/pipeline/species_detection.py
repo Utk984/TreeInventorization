@@ -66,8 +66,9 @@ def get_species_gpt(image, pano_address, client):
 
     # convert image to jpg (dont save) then base64 encode
     image = PIL.Image.fromarray(image)
-    image.save("temp.jpg")
-    with open("temp.jpg", "rb") as f:
+    temp_path = "./data/images/temp.jpg"
+    image.save(temp_path)
+    with open(temp_path, "rb") as f:
         image_base64 = base64.b64encode(f.read()).decode()
 
     address = ""
