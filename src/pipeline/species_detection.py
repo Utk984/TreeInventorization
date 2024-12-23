@@ -1,5 +1,6 @@
 import base64
 import json
+from textwrap import dedent
 
 import google.generativeai as genai
 import PIL.Image
@@ -77,27 +78,6 @@ def get_species_gpt(image, pano_address, client):
 
     response = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a tree expert who has to give best guess on the species of the tree in the image given its address",
-            },
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{image_base64}",
-                        },
-                    },
-                    {
-                        "type": "text",
-                        "text": f"Identify the tree species in this image, given that it's located in {address}. Give your best guess.",
-                    },
-                ],
-            },
-        ],
         response_format={
             "type": "json_schema",
             "json_schema": {
@@ -105,12 +85,20 @@ def get_species_gpt(image, pano_address, client):
                 "schema": {
                     "type": "object",
                     "properties": {
+                        "family": {
+                            "description": "The scientific family of the tree",
+                            "type": "string",
+                        },
+                        "genus": {
+                            "description": "The scientific genus of the tree",
+                            "type": "string",
+                        },
                         "species": {
                             "description": "The species of the tree",
                             "type": "string",
                         },
                         "common_name": {
-                            "description": "The common name of the tree",
+                            "description": "The common name of the tree. Normalize these values so they are similar accross multiple predictions",
                             "type": "string",
                         },
                         "short_description": {
@@ -122,6 +110,47 @@ def get_species_gpt(image, pano_address, client):
                 },
             },
         },
+        messages=[
+            {
+                "role": "system",
+                "content": dedent(
+                    """
+                    You are a tree expert who has to give best guess on the species of the tree in the image given its address. Note that you are detecting trees in Chandigarh, India, where the most popular trees are given below (in order of popularity)
+                        Chakrasia
+                        Mahogany
+                        Mulberry
+                        Arjun
+                        Mango
+                        Peepal
+                        Pilkhan
+                        Fig
+                        Jamun
+                        Siri
+                        Gulmohar
+                        Neem
+                        Banyan
+                        Dek
+                        Ashoka
+                        Ber
+                    """
+                ),
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"Identify the tree species in this image, given that it's located in {address}. Give your best guess.",
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{image_base64}",
+                        },
+                    },
+                ],
+            },
+        ],
     )
 
     response_dict = response.to_dict()
@@ -130,13 +159,24 @@ def get_species_gpt(image, pano_address, client):
 
     content = response.choices[0].message.content
 
-    # print("\n***********\n", content)
-
     # convert content to dict
     content = json.loads(content)
 
+    family = content.get("family")
+    genus = content.get("genus")
     species = content.get("species")
     common_name = content.get("common_name")
     short_description = content.get("short_description")
 
-    return species, common_name, short_description
+    # make a response dict to return
+    gpt_response = {
+        "family": family,
+        "genus": genus,
+        "species": species,
+        "common_name": common_name,
+        "description": short_description,
+        "usage": str(response.usage),
+    }
+
+    return gpt_response
+    # return species, common_name, short_description

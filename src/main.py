@@ -31,16 +31,16 @@ def process_panorama_batch(config):
     # Load panoramas from CSV
     panoramas = pd.read_csv(config.PANORAMA_CSV)
 
-    start_row = 0
-
-    # use panoramas df from start row onwards
+    # # use panoramas df from start row onwards
+    # start_row = 0
     # panoramas = panoramas.iloc[start_row:]
+
     print(f"Total panoramas to process: {len(panoramas)}")
 
     # Model and AWS S3 initialization
     print("Initializing model and AWS S3 client...")
     genai.configure(api_key=config.GEMINI_API_KEY)
-    model = genai.GenerativeModel(model_name="gemini-1.5-flash-8b")
+    # model = genai.GenerativeModel(model_name="gemini-1.5-flash-8b")
     client = OpenAI()
 
     # s3 = boto3.client("s3", region_name="ap-south-1")
@@ -101,11 +101,12 @@ def process_panorama_batch(config):
                             lat, lon, orig_point = image2latlon(box, theta, pano)
 
                             # 6. Get species, common name, description of tree
-                            gem_species, gem_common_name, gem_description = (
-                                get_species_gemini(im_crop, pano.address, model)
-                            )
-                            gpt_species, gpt_common_name, gpt_description = (
-                                get_species_gpt(im_crop, pano.address, client)
+                            # gem_species, gem_common_name, gem_description = (
+                            #     get_species_gemini(im_crop, pano.address, model)
+                            # )
+                            gem_species, gem_common_name, gem_description = "", "", ""
+                            gpt_response = get_species_gpt(
+                                im_crop, pano.address, client
                             )
 
                             # 7. Save annotation to database (OR CSV)
@@ -126,9 +127,12 @@ def process_panorama_batch(config):
                                 "gem_species": gem_species,
                                 "gem_common_name": gem_common_name,
                                 "gem_description": gem_description,
-                                "gpt_species": gpt_species,
-                                "gpt_common_name": gpt_common_name,
-                                "gpt_description": gpt_description,
+                                "gpt_family": gpt_response["family"],
+                                "gpt_genus": gpt_response["genus"],
+                                "gpt_species": gpt_response["species"],
+                                "gpt_common_name": gpt_response["common_name"],
+                                "gpt_description": gpt_response["description"],
+                                "gpt_usage": gpt_response["usage"],
                                 "theta": theta,
                                 "address": row["address"],
                                 "elevation": row["elevation"],
