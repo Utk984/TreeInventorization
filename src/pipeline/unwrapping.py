@@ -3,20 +3,19 @@ import numpy as np
 from streetlevel import streetview
 
 
-def divide_panorama(pano, FOV=90, phi=0, height=720, width=1080):
+def divide_panorama(pano, FOV=90):
     """
     Generate perspective views from an equirectangular image.
 
     Parameters:
     - image (PIL.Image): The input equirectangular image.
     - FOV (int): Field of View in degrees (default is 90).
-    - phi (int): Vertical angle in degrees (default is 0).
-    - height (int): Height of the perspective image (default is 720).
-    - width (int): Width of the perspective image (default is 1080).
 
     Returns:
     - images_with_angles (list): List of tuples (image_array, theta_angle).
     """
+    height = 720
+    width = 1080
 
     # get image from pano
     image = streetview.get_panorama(pano)
@@ -26,11 +25,13 @@ def divide_panorama(pano, FOV=90, phi=0, height=720, width=1080):
     height_src, width_src, _ = img.shape
 
     images_with_angles = []
-    for theta in [-90, 0, 90]:
-        persp_img = get_perspective(
-            img, FOV, theta, phi, height, width, width_src, height_src
-        )
-        images_with_angles.append((persp_img, theta))
+
+    for theta in range(-135, 140, 15):
+        for phi in [0]:
+            persp_img = get_perspective(
+                img, FOV, theta, phi, height, width, width_src, height_src
+            )
+            images_with_angles.append((persp_img, theta, phi))
 
     return images_with_angles
 

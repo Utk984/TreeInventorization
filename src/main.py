@@ -3,10 +3,10 @@ src/main.py
 Main entry point for the urban tree inventory pipeline.
 """
 
-import boto3
+# import boto3
 import google.generativeai as genai
 import pandas as pd
-from openai import OpenAI
+# from openai import OpenAI
 from streetlevel import streetview
 from tqdm import tqdm
 
@@ -29,7 +29,8 @@ def process_panorama_batch(config):
     print("Loading panoramas from CSV...")
 
     # Load panoramas from CSV
-    panoramas = pd.read_csv(config.PANORAMA_CSV)
+    # panoramas = pd.read_csv(config.PANORAMA_CSV)
+    panoramas = pd.read_csv("./cdg_st_v3_28_29_panoramas.csv")
 
     # # use panoramas df from start row onwards
     # start_row = 0
@@ -41,7 +42,7 @@ def process_panorama_batch(config):
     print("Initializing model and AWS S3 client...")
     genai.configure(api_key=config.GEMINI_API_KEY)
     # model = genai.GenerativeModel(model_name="gemini-1.5-flash-8b")
-    client = OpenAI()
+    # client = OpenAI()
 
     # s3 = boto3.client("s3", region_name="ap-south-1")
 
@@ -95,19 +96,20 @@ def process_panorama_batch(config):
                             # cloud_save_image(
                             #     im, image_path, s3, config.CLOUD_STORAGE_BUCKET
                             # )
-                            local_save_image(im, config.OUTPUT_DIR, image_path)
+                            # local_save_image(im, config.OUTPUT_DIR, image_path)
 
                             # 5. Get lat long of tree from its image
                             lat, lon, orig_point = image2latlon(box, theta, pano)
+                            print(f"Tree {k} in view {i}: {lat}, {lon}")
 
                             # 6. Get species, common name, description of tree
                             # gem_species, gem_common_name, gem_description = (
                             #     get_species_gemini(im_crop, pano.address, model)
                             # )
                             gem_species, gem_common_name, gem_description = "", "", ""
-                            gpt_response = get_species_gpt(
-                                im_crop, pano.address, client
-                            )
+                            # gpt_response = get_species_gpt(
+                            #     im_crop, pano.address, client
+                            # )
 
                             # 7. Save annotation to database (OR CSV)
                             image_path = config.CLOUD_URL + image_path
@@ -127,12 +129,12 @@ def process_panorama_batch(config):
                                 "gem_species": gem_species,
                                 "gem_common_name": gem_common_name,
                                 "gem_description": gem_description,
-                                "gpt_family": gpt_response["family"],
-                                "gpt_genus": gpt_response["genus"],
-                                "gpt_species": gpt_response["species"],
-                                "gpt_common_name": gpt_response["common_name"],
-                                "gpt_description": gpt_response["description"],
-                                "gpt_usage": gpt_response["usage"],
+                                # "gpt_family": gpt_response["family"],
+                                # "gpt_genus": gpt_response["genus"],
+                                # "gpt_species": gpt_response["species"],
+                                # "gpt_common_name": gpt_response["common_name"],
+                                # "gpt_description": gpt_response["description"],
+                                # "gpt_usage": gpt_response["usage"],
                                 "theta": theta,
                                 "address": row["address"],
                                 "elevation": row["elevation"],

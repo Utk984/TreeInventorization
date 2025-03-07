@@ -20,10 +20,14 @@ class Config:
         self.LOG_FILE = os.path.join(self.DATA_DIR, "logs", "pipeline.log")
 
         # Panorama configuration
-        self.PANORAMA_CSV = os.path.join(self.INPUT_DIR, "cdg_st_v3_28_29_panoramas.csv")
+        self.PANORAMA_CSV = os.path.join(
+            self.INPUT_DIR, "cdg_st_v3_28_29_panoramas.csv"
+        )
         self.BATCH_SIZE = 10  # Number of panoramas to process in one batch
 
-        self.STREET_OUTPUT_CSV = os.path.join(self.DATA_DIR, "output", "street_panoramas.csv")
+        self.STREET_OUTPUT_CSV = os.path.join(
+            self.DATA_DIR, "output", "street_panoramas.csv"
+        )
 
         # Cloud storage
         self.CLOUD_STORAGE_BUCKET = os.getenv("CLOUD_STORAGE_BUCKET")

@@ -9,20 +9,20 @@ import pandas as pd
 from streetlevel import streetview
 from tqdm import tqdm
 
-from config import Config
+# from config import Config
 from pipeline.segmentation import detect_trees
 from pipeline.unwrapping import divide_panorama
 
 # config
-config = Config()
+# config = Config()
 
-panoramas = pd.read_csv(config.PANORAMA_CSV)
+# panoramas = pd.read_csv(config.PANORAMA_CSV)
+panoramas = pd.read_csv("./cdg_st_v3_28_29_panoramas.csv")
 
 print(f"Total panoramas to process: {len(panoramas)}")
 
 
 for i, row in panoramas.iterrows():
-
     pano_id = row["pano_id"]
 
     try:
@@ -33,12 +33,14 @@ for i, row in panoramas.iterrows():
 
     # check if image exists at the path
     # if panorama already exists dont download again
-    if os.path.exists(f"./data/images/verify/panos/no{i}.jpg"):
+    if os.path.exists(f"./data/images/verify/trees/panos/{i}_{pano_id}.jpg"):
         print(f"Panorama {i} already exists")
 
     else:
         print(f"\nDownloading panorama {pano_id}...")
-        streetview.download_panorama(pano, f"./data/images/verify/panos/no{i}.jpg")
+        streetview.download_panorama(
+            pano, f"./data/images/verify/trees/panos/{i}_{pano_id}.jpg"
+        )
         print(f"Saved panorama {i}")
 
     print(f"\nProcessing panorama {pano_id}...")
@@ -52,7 +54,7 @@ for i, row in panoramas.iterrows():
         tree_data = detect_trees(view)
 
         # if view already exists dont download again
-        if os.path.exists(f"./data/images/verify/views/no{i}_view{j}.png"):
+        if os.path.exists(f"./data/images/verify/trees/views/{i}_view{j}.png"):
             print(f"View {j} for panorama {i} already exists")
             continue
 
@@ -78,6 +80,7 @@ for i, row in panoramas.iterrows():
 
         # save the image
         # it is a numpy ndarray
-        cv2.imwrite(f"./data/images/verify/views/no{i}_view{j}.png", im)
+        cv2.imwrite(f"./data/images/verify/trees/views/{i}_view{j}.png", im)
         # im.save(f"./data/images/verify/views/no{i}_view{j}.png")
         print(f"Saved view {j} for panorama {i}")
+        cv2.destroyAllWindows()

@@ -23,6 +23,7 @@ def cloud_save_image(im, image_path, s3, bucket_name):
         },  # Set content type
     )
 
+
 def local_save_image(im, image_dir, image_path):
     """
     Save image to local storage
