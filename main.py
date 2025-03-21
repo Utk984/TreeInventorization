@@ -1,3 +1,5 @@
+import os
+
 import cv2
 import numpy as np
 import pandas as pd
@@ -14,7 +16,9 @@ def process_panorama_batch(fov=90):
     """
     Process panoramas in batches.
     """
-    panoramas = pd.read_csv("./eval/28_29_groundtruth.csv")
+    panoramas = pd.read_csv("./streets/south_delhi_st2_vinaymarg_panoramas.csv")
+    panoramas2 = pd.read_csv("./streets/south_delhi_st1_satyamarg_panoramas.csv")
+    panoramas = pd.concat([panoramas, panoramas2], ignore_index=True)
 
     print("Urban Tree Inventory Pipeline started.")
     print(f"Total panoramas to process: {len(panoramas)}")
@@ -59,6 +63,9 @@ def process_panorama_batch(fov=90):
                             f"./data/images/views/{pano.id}_view{i}_tree{j}_box{k}.jpg"
                         )
                         mask_points = mask.xy[0].astype(np.int32)
+                        overlay = view.copy()
+                        cv2.fillPoly(overlay, np.int32([mask_points]), (0, 255, 0))
+                        cv2.addWeighted(overlay, 0.3, view, 0.7, 0, view)
                         cv2.polylines(
                             view,
                             np.int32([mask_points]),
@@ -66,7 +73,6 @@ def process_panorama_batch(fov=90):
                             color=(0, 255, 0),
                             thickness=1,
                         )
-                        cv2.fillPoly(view, np.int32([mask_points]), (0, 255, 0))
                         cv2.imwrite(image_path, view)
 
                         tree = {
