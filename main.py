@@ -11,6 +11,8 @@ from src.pipeline.unwrapping import divide_panorama
 from src.utils.image_utils import (add_masks, image2latlon, image2latlonall,
                                    remove_duplicates)
 
+os.makedirs("data", exist_ok=True)
+
 
 def process_panorama_batch(fov=90):
     """
@@ -58,7 +60,7 @@ def process_panorama_batch(fov=90):
                             continue
 
                         image_path = (
-                            f"./data/images/views/{pano.id}_view{i}_tree{j}_box{k}.jpg"
+                            f"./data/views/{pano.id}_view{i}_tree{j}_box{k}.jpg"
                         )
                         mask_points = mask.xy[0].astype(np.int32)
                         overlay = view.copy()
@@ -74,7 +76,7 @@ def process_panorama_batch(fov=90):
                         cv2.imwrite(image_path, view)
 
                         tree = {
-                            "image_path": f"./data/images/tests/{pano.id}_view{i}_tree{j}_box{k}.jpg",
+                            "image_path": image_path,
                             "pano_id": pano_id,
                             "stview_lat": pano.lat,
                             "stview_lng": pano.lon,
@@ -98,7 +100,7 @@ def process_panorama_batch(fov=90):
         # )
         tree_data = pd.DataFrame(trees)
         image = add_masks(image, tree_data)
-        cv2.imwrite(f"./data/images/full/{pano.id}.jpg", image)
+        cv2.imwrite(f"./data/full/{pano.id}.jpg", image)
         tree_df = pd.concat([tree_df, tree_data], ignore_index=True)
 
     print("\nPipeline finished.")
