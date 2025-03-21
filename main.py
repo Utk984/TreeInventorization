@@ -11,7 +11,8 @@ from src.pipeline.unwrapping import divide_panorama
 from src.utils.image_utils import (add_masks, image2latlon, image2latlonall,
                                    remove_duplicates)
 
-os.makedirs("data", exist_ok=True)
+os.makedirs("data/views", exist_ok=True)
+os.makedirs("data/full", exist_ok=True)
 
 
 def process_panorama_batch(fov=90):
