@@ -16,9 +16,7 @@ def process_panorama_batch(fov=90):
     """
     Process panoramas in batches.
     """
-    panoramas = pd.read_csv("./streets/south_delhi_st2_vinaymarg_panoramas.csv")
-    panoramas2 = pd.read_csv("./streets/south_delhi_st1_satyamarg_panoramas.csv")
-    panoramas = pd.concat([panoramas, panoramas2], ignore_index=True)
+    panoramas = pd.read_csv("./delhi_streets.csv")
 
     print("Urban Tree Inventory Pipeline started.")
     print(f"Total panoramas to process: {len(panoramas)}")
