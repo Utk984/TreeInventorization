@@ -8,7 +8,6 @@ images/
 *__pycache__/
 runs
 panoramas
-eval/*.csv
 eval/*.html
 models
 Untitled.ipynb

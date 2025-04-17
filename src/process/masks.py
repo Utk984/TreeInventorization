@@ -81,7 +81,7 @@ def remove_duplicates(df, image_x, image_y, overlap_threshold=0.4):
     return df.drop(index=list(to_remove)).reset_index(drop=True)
 
 
-def add_masks(image, df):
+def add_masks(image, df, FOV=90):
     """
     Add masks to an image by overlaying Ultralytics masks.
 
@@ -105,7 +105,7 @@ def add_masks(image, df):
             mask_points = mask.xy[0].astype(np.int32)
             for point in mask_points:
                 orig_point = map_perspective_point_to_original(
-                    point[0], point[1], row["theta"], img_shape
+                    point[0], point[1], row["theta"], img_shape, FOV=FOV
                 )
                 orig_point = tuple(map(int, orig_point))
                 original_points.append(orig_point)

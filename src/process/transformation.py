@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 def map_perspective_point_to_original(x, y, theta, img_shape, FOV=90):
-    height, width = 720, 1080
+    height, width = 1024, 1024
     PHI = 0
     width_src, height_src = img_shape
 

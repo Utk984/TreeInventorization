@@ -13,8 +13,8 @@ def divide_panorama(image, FOV=90):
     Returns:
     - images_with_angles (list): List of tuples (image_array, theta_angle).
     """
-    height = 720
-    width = 1080
+    height = 1024
+    width = 1024
     PHI = 0
 
     height_src, width_src, _ = image.shape
