@@ -1,80 +1,74 @@
 import os
-
 import cv2
 import numpy as np
 import pandas as pd
-from streetlevel import streetview
 from tqdm import tqdm
+from ultralytics import YOLO
+import torch
+from streetlevel import streetview
 
-from src.pipeline.segmentation import detect_trees
-from src.pipeline.unwrapping import divide_panorama
-from src.utils.image_utils import (add_masks, image2latlon, image2latlonall,
-                                   remove_duplicates)
+from config import Config
+from models.DepthAnything.depth_anything_v2.dpt import DepthAnythingV2
+from src.inference.segment import detect_trees
+from src.inference.depth import estimate_depth
+from src.unwrapping.unwrap import divide_panorama
+from src.process.masks import add_masks, remove_duplicates, make_image
+from src.process.transformation import get_point
+from src.process.geodesic import get_coordinates
 
-os.makedirs("data/views", exist_ok=True)
-os.makedirs("data/full", exist_ok=True)
+
+def load_models(config: Config):
+    # Load depth model
+    depth_model = DepthAnythingV2(**{**config.MODEL_CONFIGS["vitl"], "max_depth": 80})
+    depth_model.load_state_dict(torch.load(config.DEPTH_MODEL_PATH, map_location="cpu"))
+    depth_model.to(config.DEVICE).eval()
+
+    # Load tree segmentation model
+    tree_model = YOLO(config.TREE_MODEL_PATH)
+    tree_model.to(config.DEVICE).eval()
+
+    return depth_model, tree_model
 
 
-def process_panorama_batch(fov=90):
-    """
-    Process panoramas in batches.
-    """
-    panoramas = pd.read_csv("./delhi_streets.csv")
-
-    print("Urban Tree Inventory Pipeline started.")
-    print(f"Total panoramas to process: {len(panoramas)}")
-
+def process_panorama_batch(config: Config):
+    panoramas = pd.read_csv(config.PANORAMA_CSV)
     tree_df = pd.DataFrame()
     tqdm.pandas()
 
-    for _, row in tqdm(panoramas.iterrows()):
+    depth_model, tree_model = load_models(config)
+
+    for _, row in tqdm(panoramas.iterrows(), total=len(panoramas)):
         pano_id = row["pano_id"]
         trees = []
+
         try:
             pano = streetview.find_panorama_by_id(pano_id, download_depth=True)
         except Exception as e:
             print(f"Error finding panorama {pano_id}: {e}")
             continue
 
-        views = divide_panorama(pano, FOV=fov)
         image = np.array(streetview.get_panorama(pano))
+        depth = estimate_depth(image, depth_model)
+        views = divide_panorama(image, FOV=config.FOV)
 
-        for i, (view, theta, phi) in enumerate(views):
-            tree_data = detect_trees(view)
+        for i, (view, theta) in enumerate(views):
+            tree_data = detect_trees(view, tree_model)
             for j, tree in enumerate(tree_data):
                 masks = tree.masks
                 boxes = tree.boxes
                 if masks is not None:
                     for k, mask in enumerate(masks):
+                        image_path = os.path.join(config.VIEW_DIR, f"{pano.id}_view{i}_tree{j}_box{k}.jpg")
                         conf = boxes[k].conf.item()
+
                         try:
-                            lat, lon, orig_point = image2latlon(
-                                mask, theta, pano, fov, phi
-                            )
-                            # coordinates = image2latlonall(mask, theta, pano)
+                            orig_point, pers_point = get_point(mask, theta, pano, config.FOV)
+                            distance = depth[pers_point[0]][pers_point[1]]
+                            lat, lon = get_coordinates(pano, orig_point, image.shape[1], distance)
+                            make_image(view, boxes[k], mask, image_path)
                         except Exception as e:
                             print(f"Error processing tree {k} in view {i}: {e}")
                             continue
-
-                        if lat is None or lon is None:
-                            print(f"Tree {k} in view {i} not found.")
-                            continue
-
-                        image_path = (
-                            f"./data/views/{pano.id}_view{i}_tree{j}_box{k}.jpg"
-                        )
-                        mask_points = mask.xy[0].astype(np.int32)
-                        overlay = view.copy()
-                        cv2.fillPoly(overlay, np.int32([mask_points]), (0, 255, 0))
-                        cv2.addWeighted(overlay, 0.3, view, 0.7, 0, view)
-                        cv2.polylines(
-                            view,
-                            np.int32([mask_points]),
-                            isClosed=True,
-                            color=(0, 255, 0),
-                            thickness=1,
-                        )
-                        cv2.imwrite(image_path, view)
 
                         tree = {
                             "image_path": image_path,
@@ -83,31 +77,26 @@ def process_panorama_batch(fov=90):
                             "stview_lng": pano.lon,
                             "tree_lat": lat,
                             "tree_lng": lon,
-                            "lat_offset": 0,
-                            "lng_offset": 0,
                             "image_x": float(orig_point[0]),
                             "image_y": float(orig_point[1]),
                             "theta": theta,
                             "mask": mask,
                             "conf": conf,
-                            # "coordinates": coordinates,
                         }
                         trees.append(tree)
 
-        if len(trees) == 0:
+        if not trees:
             continue
-        # tree_data = remove_duplicates(
-        #     pd.DataFrame(trees), image.shape[1], image.shape[0]
-        # )
-        tree_data = pd.DataFrame(trees)
+
+        tree_data = remove_duplicates(pd.DataFrame(trees), image.shape[1], image.shape[0])
         image = add_masks(image, tree_data)
-        cv2.imwrite(f"./data/full/{pano.id}.jpg", image)
+        cv2.imwrite(os.path.join(config.FULL_DIR, f"{pano.id}.jpg"), image)
         tree_df = pd.concat([tree_df, tree_data], ignore_index=True)
 
-    print("\nPipeline finished.")
-    tree_df.to_csv("tree_data.csv", index=False, lineterminator="\n")
+    print("\n✅ Pipeline finished.")
+    tree_df.to_csv(config.STREET_OUTPUT_CSV, index=False, lineterminator="\n")
 
 
 if __name__ == "__main__":
-    fov = 90
-    process_panorama_batch(fov)
+    config = Config()
+    process_panorama_batch(config)
