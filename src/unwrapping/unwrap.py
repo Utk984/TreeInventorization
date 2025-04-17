@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 
-def divide_panorama(image, FOV=90):
+def divide_panorama(image, height, width, FOV):
     """
     Generate perspective views from an equirectangular image.
 
@@ -13,8 +13,6 @@ def divide_panorama(image, FOV=90):
     Returns:
     - images_with_angles (list): List of tuples (image_array, theta_angle).
     """
-    height = 1024
-    width = 1024
     PHI = 0
 
     height_src, width_src, _ = image.shape
@@ -23,14 +21,14 @@ def divide_panorama(image, FOV=90):
 
     for THETA in range(-135, 140, 15):
         persp_img = get_perspective(
-            image, FOV, THETA, PHI, height, width, width_src, height_src
+            image, FOV, THETA, PHI, height, width, height_src, width_src
         )
         images_with_angles.append((persp_img, THETA))
 
     return images_with_angles
 
 
-def get_perspective(img, FOV, THETA, PHI, height, width, width_src, height_src):
+def get_perspective(img, FOV, THETA, PHI, height, width, height_src, width_src):
     """
     Extract a perspective view from an equirectangular image.
 

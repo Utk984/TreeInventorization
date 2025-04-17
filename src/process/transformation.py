@@ -1,8 +1,7 @@
 import cv2
 import numpy as np
 
-def map_perspective_point_to_original(x, y, theta, img_shape, FOV=90):
-    height, width = 1024, 1024
+def map_perspective_point_to_original(x, y, theta, img_shape, height, width, FOV):
     PHI = 0
     width_src, height_src = img_shape
 
@@ -47,7 +46,7 @@ def map_perspective_point_to_original(x, y, theta, img_shape, FOV=90):
     return (eq_x, eq_y)
 
 
-def get_point(mask, theta, pano, FOV):
+def get_point(mask, theta, pano, height, width, FOV):
     mask_points = mask.xy[0].astype(np.int32)
     bottom_y = np.max(mask_points[:, 1])
     bottom_x_coords = mask_points[mask_points[:, 1] == bottom_y][:, 0]
@@ -56,7 +55,7 @@ def get_point(mask, theta, pano, FOV):
     img_shape = (pano.image_sizes[5].x, pano.image_sizes[5].y)
 
     orig_point = map_perspective_point_to_original(
-        bottom_center_x, bottom_y, theta, img_shape, FOV=FOV
+        bottom_center_x, bottom_y, theta, img_shape, height, width, FOV
     )
     orig_point = tuple(map(int, orig_point))
     return orig_point, (bottom_center_x, bottom_y)

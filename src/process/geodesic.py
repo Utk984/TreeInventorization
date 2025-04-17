@@ -1,6 +1,5 @@
 import math
 
-
 def get_coordinates(pano, point, width, distance):
     center = width/2
     bearing_radians = pano.heading/center * point[0]

@@ -21,7 +21,7 @@ class Config:
         os.makedirs(self.LOG_DIR, exist_ok=True)
         
         # Panorama CSV input
-        self.PANORAMA_CSV = os.path.join(self.ROOT_DIR, "chandigarh_panoramas.csv")
+        self.PANORAMA_CSV = os.path.join(self.ROOT_DIR, "delhi_streets.csv")
 
         # Output CSV
         self.OUTPUT_CSV = os.path.join(self.ROOT_DIR, "tree_data.csv")
@@ -45,7 +45,9 @@ class Config:
         }
 
         # Other settings
-        self.FOV = 60
+        self.FOV = 90
+        self.WIDTH = 1024
+        self.HEIGHT = 720
         self.BATCH_SIZE = 10
 
         # Logging
