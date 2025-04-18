@@ -5,7 +5,7 @@ import pandas as pd
 from tqdm import tqdm
 from streetlevel import streetview
 import asyncio
-from src.config import Config
+from config import Config
 from aiohttp import ClientSession
 from src.inference.segment import detect_trees
 from src.inference.depth import estimate_depth

@@ -1,7 +1,7 @@
-from src.cli import parse_args, build_config
+from cli import parse_args, build_config
 from src.pipeline.pano_async import process_panoramas
 from models.DepthAnything.depth_anything_v2.dpt import DepthAnythingV2
-from src.config import Config
+from config import Config
 import torch
 from ultralytics import YOLO
 import asyncio
