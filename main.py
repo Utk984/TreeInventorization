@@ -7,6 +7,8 @@ from ultralytics import YOLO
 import torch
 from streetlevel import streetview
 import time
+import asyncio
+from aiohttp import ClientSession
 from config import Config
 from models.DepthAnything.depth_anything_v2.dpt import DepthAnythingV2
 from src.inference.segment import detect_trees
@@ -15,6 +17,8 @@ from src.unwrapping.unwrap import divide_panorama
 from src.process.masks import add_masks, remove_duplicates, make_image
 from src.process.transformation import get_point
 from src.process.geodesic import get_coordinates
+from concurrent.futures import ThreadPoolExecutor
+IO_EXECUTOR = ThreadPoolExecutor(max_workers=1)   # exactly one thread
 
 
 def load_models(config: Config):
@@ -25,10 +29,15 @@ def load_models(config: Config):
 
     # Load tree segmentation model
     tree_model = YOLO(config.TREE_MODEL_PATH)
-    tree_model.to(config.DEVICE).eval()
 
     return depth_model, tree_model
 
+async def fetch_pano_by_id(pano_id: str, session: ClientSession):
+    pano = await streetview.find_panorama_by_id_async(
+        pano_id, session, download_depth=False
+    )
+    rgb = await streetview.get_panorama_async(pano, session) 
+    return pano, np.array(rgb)
 
 def process_view(view, tree_data, pano, image, depth, theta, i):
     trees = []
@@ -44,7 +53,9 @@ def process_view(view, tree_data, pano, image, depth, theta, i):
                     orig_point, pers_point = get_point(mask, theta, pano, config.HEIGHT, config.WIDTH, config.FOV)
                     distance = depth[pers_point[0]][pers_point[1]]
                     lat, lon = get_coordinates(pano, orig_point, image.shape[1], distance)
-                    make_image(view, boxes[k], mask, image_path)
+                    IO_EXECUTOR.submit(
+                        make_image, view, boxes[k], mask, image_path
+                    )
                 except Exception as e:
                     print(f"Error processing tree {k} in view {i}: {e}")
                     continue
@@ -94,14 +105,64 @@ def process_panorama_batch(config: Config):
             continue
 
         tree_data = remove_duplicates(pd.DataFrame(trees), image.shape[1], image.shape[0], config.HEIGHT, config.WIDTH, config.FOV)
-        image = add_masks(image, tree_data, config.HEIGHT, config.WIDTH, config.FOV)
-        cv2.imwrite(os.path.join(config.FULL_DIR, f"{pano.id}.jpg"), image)
+
+        def _save_full(img=image.copy(), td=tree_data.copy(), pid=pano.id):
+            full = add_masks(
+                img, td, config.HEIGHT, config.WIDTH, config.FOV
+            )
+            cv2.imwrite(os.path.join(config.FULL_DIR, f"{pid}.jpg"), full)
+        IO_EXECUTOR.submit(_save_full)
+
         tree_df = pd.concat([tree_df, tree_data], ignore_index=True)
 
     print("\n✅ Pipeline finished.")
     tree_df.to_csv(config.STREET_OUTPUT_CSV, index=False, lineterminator="\n")
 
+async def async_pipeline(config: Config):
+    pano_ids = pd.read_csv(config.PANORAMA_CSV)["pano_id"].tolist()
+    depth_model, tree_model = load_models(config)
+    trees_df = []       
+
+    async with ClientSession() as session:
+        fetch_task = asyncio.create_task(fetch_pano_by_id(pano_ids[0], session))
+
+        for next_id in tqdm(pano_ids[1:], total=len(pano_ids)):
+            pano, image = await fetch_task
+            fetch_task = asyncio.create_task(fetch_pano_by_id(next_id, session))
+
+            depth  = estimate_depth(image, depth_model)
+            views  = divide_panorama(image, config.HEIGHT, config.WIDTH, config.FOV)
+
+            trees = []
+            for i, (view, theta) in enumerate(views):
+                tree_data = detect_trees(view, tree_model, config.DEVICE)
+                trees.extend(
+                    process_view(view, tree_data, pano, image, depth, theta, i)
+                )
+
+            if not trees:
+                continue
+
+            df_part = remove_duplicates(
+                pd.DataFrame(trees),
+                image.shape[1], image.shape[0],
+                config.HEIGHT, config.WIDTH, config.FOV
+            )
+
+            def _save_full(img=image.copy(), td=df_part.copy(), pid=pano.id):
+                full = add_masks(img, td, config.HEIGHT, config.WIDTH, config.FOV)
+                cv2.imwrite(os.path.join(config.FULL_DIR, f"{pid}.jpg"), full)
+
+            IO_EXECUTOR.submit(_save_full)
+            trees_df.append(df_part)
+        pano, image = await fetch_task
+
+    IO_EXECUTOR.shutdown(wait=True)
+
+    final_df = pd.concat(trees_df, ignore_index=True)
+    final_df.to_csv(config.STREET_OUTPUT_CSV, index=False, lineterminator="\n")
+    print("\n✅ Pipeline finished.")
 
 if __name__ == "__main__":
     config = Config()
-    process_panorama_batch(config)
+    asyncio.run(async_pipeline(config))
