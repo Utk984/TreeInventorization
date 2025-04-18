@@ -5,6 +5,7 @@ import pandas as pd
 from tqdm import tqdm
 from streetlevel import streetview
 import asyncio
+from src.config import Config
 from aiohttp import ClientSession
 from src.inference.segment import detect_trees
 from src.inference.depth import estimate_depth
@@ -22,7 +23,7 @@ async def fetch_pano_by_id(pano_id: str, session: ClientSession):
     rgb = await streetview.get_panorama_async(pano, session) 
     return pano, np.array(rgb)
 
-def process_view(config, view, tree_data, pano, image, depth, theta, i):
+def process_view(config: Config, view, tree_data, pano, image, depth, theta, i):
     trees = []
     for j, tree in enumerate(tree_data):
         masks = tree.masks
@@ -59,7 +60,7 @@ def process_view(config, view, tree_data, pano, image, depth, theta, i):
                 trees.append(tree)
     return trees
 
-async def process_panoramas(config, depth_model, tree_model):
+async def process_panoramas(config: Config, depth_model, tree_model):
     pano_ids = pd.read_csv(config.PANORAMA_CSV)["pano_id"].tolist()
     trees_df = []       
 
@@ -100,5 +101,5 @@ async def process_panoramas(config, depth_model, tree_model):
     IO_EXECUTOR.shutdown(wait=True)
 
     final_df = pd.concat(trees_df, ignore_index=True)
-    final_df.to_csv(config.STREET_OUTPUT_CSV, index=False, lineterminator="\n")
+    final_df.to_csv(config.OUTPUT_CSV, index=False, lineterminator="\n")
     print("\n✅ Pipeline finished.")
