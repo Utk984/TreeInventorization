@@ -1,8 +1,8 @@
 import cv2
 import numpy as np
 from src.process.transformation import map_perspective_point_to_original
-import torch
-from torchvision.ops import nms
+from shapely.geometry import Polygon
+from shapely.strtree import STRtree
 
 def make_image(view, box, mask, image_path):
     """
@@ -30,103 +30,56 @@ def make_image(view, box, mask, image_path):
 
     cv2.imwrite(image_path, im)
 
-def remove_duplicates2(df, image_x, image_y, iou_threshold=0.4):
+def remove_duplicates( df, image_x, image_y, height, width, fov, iou_threshold = 0.4):
     """
-    Performs bounding box NMS using transformed mask polygons in the full panorama.
+    * Converts each mask to a Shapely Polygon (no giant binary images)
+    * Uses an STRtree to query only potentially overlapping pairs
     """
-    masks = df["mask"].tolist()
-    theta = df["theta"].tolist()
+    polys, areas, idx_map = [], [], [] 
 
-    boxes = []
-    scores = []
-    valid_indices = []
-
-    for i, mask in enumerate(masks):
-        try:
-            if mask.xy:
-                mask_points = mask.xy[0].astype(np.int32)
-                original_points = []
-
-                for point in mask_points:
-                    orig_point = map_perspective_point_to_original(
-                        point[0], point[1], theta[i], (image_x, image_y)
-                    )
-                    orig_point = tuple(map(int, orig_point))
-                    original_points.append(orig_point)
-
-                # Create full-pano binary mask
-                binary_mask = np.zeros((image_y, image_x), dtype=np.uint8)
-                cv2.fillPoly(binary_mask, [np.array(original_points, np.int32)], 1)
-
-                # Get bounding box on the pano-aligned mask
-                x, y, w, h = cv2.boundingRect(np.array(original_points))
-                box = [x, y, x + w, y + h]  # [x1, y1, x2, y2]
-
-                boxes.append(box)
-                scores.append(df["conf"].iloc[i])
-                valid_indices.append(i)
-        except Exception as e:
+    for idx, (mask, th) in enumerate(zip(df["mask"], df["theta"])):
+        if not mask.xy:
             continue
 
-    boxes_tensor = torch.tensor(boxes, dtype=torch.float32)
-    scores_tensor = torch.tensor(scores, dtype=torch.float32)
-
-    keep = nms(boxes_tensor, scores_tensor, iou_threshold)
-    kept_indices = [valid_indices[i] for i in keep.numpy()]
-    return df.iloc[kept_indices].reset_index(drop=True)
-
-def remove_duplicates(df, image_x, image_y, height, width, FOV, iou_threshold=0.4):
-    """
-    Removes overlapping masks and masks contained within others.
-    df: DataFrame with a column 'mask', where each mask is an Ultralytics mask object.
-    iou_threshold: IoU threshold above which masks are considered overlapping.
-    """
-    masks = df["mask"].tolist()
-    theta = df["theta"].tolist()
-    binary_masks = []
-    to_remove = set()
-
-    for i, mask in enumerate(masks):
-        try:
-            if mask.xy:
-                mask_points = mask.xy[0].astype(np.int32)
-                original_points = []
-                for point in mask_points:
-                    orig_point = map_perspective_point_to_original(
-                        point[0], point[1], theta[i], (image_x, image_y), height, width, FOV
-                    )
-                    orig_point = tuple(map(int, orig_point))
-                    original_points.append(orig_point)
-                binary_mask = np.zeros((image_y, image_x), dtype=np.uint8)
-                cv2.fillPoly(binary_mask, [np.array(original_points, np.int32)], 1)
-                binary_masks.append(binary_mask)
-            else:
-                binary_masks.append(None)
-        except (AttributeError, IndexError):
-            binary_masks.append(None)
-
-    for i in range(len(binary_masks)):
-        if i in to_remove or binary_masks[i] is None:
+        pts = mask.xy[0].astype(np.float32)
+        pano_pts = np.vstack(
+            [
+                map_perspective_point_to_original(
+                    x, y, th, (image_x, image_y), height, width, fov
+                )
+                for x, y in pts
+            ]
+        )
+        poly = Polygon(pano_pts).buffer(0)  
+        if poly.is_empty or not poly.is_valid:
             continue
-        mask_i = binary_masks[i]
-        area_i = np.sum(mask_i)
-        for j in range(i + 1, len(binary_masks)):
-            if j in to_remove or binary_masks[j] is None:
-                continue
-            mask_j = binary_masks[j]
-            area_j = np.sum(mask_j)
-            intersection = np.sum(np.logical_and(mask_i, mask_j))
-            smaller_area = min(area_i, area_j)
-            overlap_ratio = intersection / smaller_area
-            if overlap_ratio > iou_threshold:
-                if area_i < area_j:
-                    to_remove.add(i)
-                    break
-                else:
-                    to_remove.add(j)
+
+        polys.append(poly)
+        areas.append(poly.area)
+        idx_map.append(idx)
+
+    if not polys:
+        return df.iloc[0:0]        
     
-    return df.drop(index=list(to_remove)).reset_index(drop=True)
+    tree = STRtree(polys)
+    keep = set(range(len(polys)))  
 
+    for i in range(len(polys)):
+        if i not in keep:
+            continue
+        cand = tree.query(polys[i])  
+        for j in cand:
+            if j <= i or j not in keep:
+                continue
+            inter = polys[i].intersection(polys[j]).area
+            if inter == 0:
+                continue
+            smaller = areas[i] if areas[i] < areas[j] else areas[j]
+            if inter / smaller > iou_threshold:
+                keep.discard(i if areas[i] < areas[j] else j)
+
+    keep_df_idx = [idx_map[k] for k in keep]
+    return df.iloc[keep_df_idx].reset_index(drop=True)
 
 def add_masks(image, df, height, width, FOV):
     """
