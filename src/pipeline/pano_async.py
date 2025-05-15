@@ -35,7 +35,7 @@ def process_view(config: Config, view, tree_data, pano, image, depth, theta, i):
 
                 try:
                     orig_point, pers_point = get_point(mask, theta, pano, config.HEIGHT, config.WIDTH, config.FOV)
-                    distance = depth[pers_point[0]][pers_point[1]]
+                    distance = depth[orig_point[0]][orig_point[1]]
                     lat, lon = get_coordinates(pano, orig_point, image.shape[1], distance)
                     IO_EXECUTOR.submit(
                         make_image, view, boxes[k], mask, image_path
@@ -56,8 +56,6 @@ def process_view(config: Config, view, tree_data, pano, image, depth, theta, i):
                     "theta": theta,
                     "mask": mask,
                     "conf": conf,
-                    "gsv_depth": pano.depth,
-                    "predicted_depth": depth
                 }
                 trees.append(tree)
     return trees
@@ -65,6 +63,7 @@ def process_view(config: Config, view, tree_data, pano, image, depth, theta, i):
 async def process_panoramas(config: Config, depth_model, tree_model):
     pano_ids = pd.read_csv(config.PANORAMA_CSV)["pano_id"].tolist()
     trees_df = []     
+    depth_df = []
 
     async with ClientSession() as session:
         fetch_task = asyncio.create_task(fetch_pano_by_id(pano_ids[0], session))
@@ -74,6 +73,7 @@ async def process_panoramas(config: Config, depth_model, tree_model):
             fetch_task = asyncio.create_task(fetch_pano_by_id(next_id, session))
 
             depth  = estimate_depth(image, depth_model)
+            depth_df.append((pano.depth.data, depth))
             views  = divide_panorama(image, config.HEIGHT, config.WIDTH, config.FOV)
 
             trees = []
@@ -103,5 +103,7 @@ async def process_panoramas(config: Config, depth_model, tree_model):
     IO_EXECUTOR.shutdown(wait=True)
 
     final_df = pd.concat(trees_df, ignore_index=True)
+    depth_df = pd.DataFrame(depth_df)
     final_df.to_csv(config.OUTPUT_CSV, index=False, lineterminator="\n")
+    depth_df.to_csv("depth.csv", index=False)
     print("\n✅ Pipeline finished.")
