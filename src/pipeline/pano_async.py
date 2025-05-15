@@ -18,7 +18,7 @@ IO_EXECUTOR = ThreadPoolExecutor(max_workers=1)
 
 async def fetch_pano_by_id(pano_id: str, session: ClientSession):
     pano = await streetview.find_panorama_by_id_async(
-        pano_id, session, download_depth=False
+        pano_id, session, download_depth=True
     )
     rgb = await streetview.get_panorama_async(pano, session) 
     return pano, np.array(rgb)
@@ -56,13 +56,15 @@ def process_view(config: Config, view, tree_data, pano, image, depth, theta, i):
                     "theta": theta,
                     "mask": mask,
                     "conf": conf,
+                    "gsv_depth": pano.depth,
+                    "predicted_depth": depth
                 }
                 trees.append(tree)
     return trees
 
 async def process_panoramas(config: Config, depth_model, tree_model):
     pano_ids = pd.read_csv(config.PANORAMA_CSV)["pano_id"].tolist()
-    trees_df = []       
+    trees_df = []     
 
     async with ClientSession() as session:
         fetch_task = asyncio.create_task(fetch_pano_by_id(pano_ids[0], session))

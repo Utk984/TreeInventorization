@@ -21,7 +21,7 @@ class Config:
         os.makedirs(self.LOG_DIR, exist_ok=True)
         
         # Panorama CSV input
-        self.PANORAMA_CSV = os.path.join(self.ROOT_DIR, "delhi_streets.csv")
+        self.PANORAMA_CSV = os.path.join(self.ROOT_DIR, "chandigarh_streets.csv")
 
         # Output CSV
         self.OUTPUT_CSV = os.path.join(self.ROOT_DIR, "tree_data.csv")
