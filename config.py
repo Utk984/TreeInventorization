@@ -1,6 +1,8 @@
 import os
 import torch
 from dotenv import load_dotenv
+import logging
+from datetime import datetime
 
 class Config:
     def __init__(self):
@@ -19,6 +21,16 @@ class Config:
         os.makedirs(self.VIEW_DIR, exist_ok=True)
         os.makedirs(self.FULL_DIR, exist_ok=True)
         os.makedirs(self.LOG_DIR, exist_ok=True)
+
+        # Configure logging - every level INFO and DEBUG are logged
+        logging.basicConfig(
+            level=logging.DEBUG,  # DEBUG level captures DEBUG, INFO, WARNING, ERROR, CRITICAL
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler(os.path.join(self.LOG_DIR, f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_pipeline.log")),
+                # logging.StreamHandler()
+            ]
+        )
         
         # Panorama CSV input
         self.PANORAMA_CSV = os.path.join(self.ROOT_DIR, "chandigarh_streets.csv")
