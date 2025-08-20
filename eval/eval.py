@@ -285,12 +285,6 @@ def create_parser():
         help="Path to the CSV file containing predictions.",
     )
     parser.add_argument(
-        "--duplicate",
-        type=float,
-        default=0,
-        help="Remove duplicates within threshold (meters). Default: None",
-    )
-    parser.add_argument(
         "--plot",
         type=lambda x: x.lower() == "true",
         default=False,

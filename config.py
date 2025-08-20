@@ -16,15 +16,17 @@ class Config:
         self.VIEW_DIR = os.path.join(self.DATA_DIR, "views")
         self.FULL_DIR = os.path.join(self.DATA_DIR, "full")
         self.LOG_DIR = os.path.join(self.DATA_DIR, "logs")
+        self.DEPTH_DIR = os.path.join(self.DATA_DIR, "depth_maps")
 
         # Ensure output folders exist
         os.makedirs(self.VIEW_DIR, exist_ok=True)
         os.makedirs(self.FULL_DIR, exist_ok=True)
         os.makedirs(self.LOG_DIR, exist_ok=True)
+        os.makedirs(self.DEPTH_DIR, exist_ok=True)
 
         # Configure logging - every level INFO and DEBUG are logged
         logging.basicConfig(
-            level=logging.DEBUG,  # DEBUG level captures DEBUG, INFO, WARNING, ERROR, CRITICAL
+            level=logging.INFO,  # DEBUG level captures DEBUG, INFO, WARNING, ERROR, CRITICAL
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             handlers=[
                 logging.FileHandler(os.path.join(self.LOG_DIR, f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_pipeline.log")),
@@ -33,7 +35,7 @@ class Config:
         )
         
         # Panorama CSV input
-        self.PANORAMA_CSV = os.path.join(self.ROOT_DIR, "chandigarh_streets.csv")
+        self.PANORAMA_CSV = os.path.join(self.ROOT_DIR, "streetviews/chandigarh_28_29.csv")
 
         # Output CSV
         self.OUTPUT_CSV = os.path.join(self.ROOT_DIR, "tree_data.csv")
@@ -46,6 +48,10 @@ class Config:
         self.DEPTH_MODEL_PATH = os.path.join(
             self.ROOT_DIR, "models", "DepthAnything", "checkpoints",
             "depth_anything_v2_metric_vkitti_vitl.pth"
+        )
+
+        self.DEPTH_CALIBRATION_MODEL_PATH = os.path.join(
+            self.ROOT_DIR, "models", "CalibrateDepth", "weights", "random_forest.pkl"
         )
 
         self.DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")

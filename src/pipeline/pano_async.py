@@ -55,11 +55,9 @@ async def fetch_pano_by_id(pano_id: str, session: ClientSession):
         logger.error(f"❌ Error fetching panorama {pano_id}: {str(e)}")
         return None, None
 
-def process_view(config: Config, view, tree_data, pano, image, depth, theta, i):
+def process_view(config: Config, view, tree_data, pano, image, depth, theta, i, calibrate_model):
     """Process a single view with detailed logging."""
     logger.debug(f"🔄 Processing view {i} at theta={theta}°")
-    process_start_time = time.time()
-    
     trees = []
     tree_count = 0
     
@@ -81,7 +79,14 @@ def process_view(config: Config, view, tree_data, pano, image, depth, theta, i):
                     try:
                         orig_point, pers_point = get_point(mask, theta, pano, config.HEIGHT, config.WIDTH, config.FOV)
                         distance = depth[orig_point[1]][orig_point[0]]
-                        lat, lon = get_coordinates(pano, orig_point, image.shape[1], distance)
+                        distance_calibrated = calibrate_model.calibrate_single(distance, orig_point[0], orig_point[1])
+                        logger.info(f"Distance: {distance:.2f}m, Distance calibrated: {distance_calibrated:.2f}m")
+                        logger.info(f"Orig point: {orig_point}")
+                        logger.info(f"Depth shape: {depth.shape}")
+                        logger.info(f"Pano depth shape: {pano.depth.data.shape}")
+                        pano_depth = pano.depth.data[orig_point[1]][orig_point[0]]
+                        logger.info(f"Pano Depth distance: {pano_depth:.2f}m")
+                        lat, lon = get_coordinates(pano, orig_point, image.shape[1], distance_calibrated)
                         
                         # Submit image creation to thread pool
                         IO_EXECUTOR.submit(
@@ -106,11 +111,9 @@ def process_view(config: Config, view, tree_data, pano, image, depth, theta, i):
                         "theta": theta,
                         "mask": mask,
                         "conf": conf,
+                        "distance": distance,
                     }
                     trees.append(tree)
-        
-        process_time = time.time() - process_start_time
-        logger.debug(f"✅ View {i} processed in {process_time:.2f}s - Found {tree_count} trees")
         
         return trees
         
@@ -118,7 +121,7 @@ def process_view(config: Config, view, tree_data, pano, image, depth, theta, i):
         logger.error(f"❌ Error processing view {i}: {str(e)}")
         return []
 
-async def process_panoramas(config: Config, depth_model, tree_model):
+async def process_panoramas(config: Config, depth_model, tree_model, calibrate_model):
     """Main panorama processing function with comprehensive logging."""
     logger.info("🚀 Starting panorama processing pipeline")
     pipeline_start_time = time.time()
@@ -128,9 +131,7 @@ async def process_panoramas(config: Config, depth_model, tree_model):
         logger.info(f"📋 Loading panorama IDs from: {config.PANORAMA_CSV}")
         pano_ids = pd.read_csv(config.PANORAMA_CSV)["pano_id"].tolist()
         logger.info(f"📊 Found {len(pano_ids)} panoramas to process")
-        
-        trees_df = []     
-        depth_df = []
+
         processed_count = 0
         skipped_count = 0
         error_count = 0
@@ -163,7 +164,9 @@ async def process_panoramas(config: Config, depth_model, tree_model):
                     depth_time = time.time() - depth_start_time
                     logger.debug(f"✅ Depth estimation completed in {depth_time:.2f}s")
                     
-                    depth_df.append((pano.depth.data, depth))
+                    # Persist depth maps to disk to avoid keeping them all in memory
+                    # np.save(os.path.join(config.DEPTH_DIR, f"{pano.id}_gdepth.npy"), pano.depth.data)
+                    # np.save(os.path.join(config.DEPTH_DIR, f"{pano.id}_pred.npy"), depth)
                     
                     # Generate perspective views
                     logger.debug("🔄 Generating perspective views")
@@ -178,7 +181,7 @@ async def process_panoramas(config: Config, depth_model, tree_model):
                         logger.debug(f"🔍 Detecting trees in view {i}")
                         tree_data = detect_trees(view, tree_model, config.DEVICE)
                         trees.extend(
-                            process_view(config, view, tree_data, pano, image, depth, theta, i)
+                            process_view(config, view, tree_data, pano, image, depth, theta, i, calibrate_model)
                         )
 
                     if not trees:
@@ -208,7 +211,17 @@ async def process_panoramas(config: Config, depth_model, tree_model):
                         logger.debug(f"✅ Full panorama saved: {full_path}")
 
                     IO_EXECUTOR.submit(_save_full)
-                    trees_df.append(df_part)
+
+                    # Append deduplicated detections directly to the output CSV
+                    output_exists = os.path.exists(config.OUTPUT_CSV)
+                    df_part.to_csv(
+                        config.OUTPUT_CSV,
+                        mode="a",
+                        index=False,
+                        header=not output_exists,
+                        lineterminator="\n",
+                    )
+
                     processed_count += 1
                     
                     pano_time = time.time() - pano_start_time
@@ -233,22 +246,8 @@ async def process_panoramas(config: Config, depth_model, tree_model):
         logger.info("🛑 Shutting down IO executor")
         IO_EXECUTOR.shutdown(wait=True)
 
-        # Save results
-        logger.info("💾 Saving final results")
+        # Results have already been written incrementally; nothing to aggregate here.
         save_start_time = time.time()
-        
-        if trees_df:
-            final_df = pd.concat(trees_df, ignore_index=True)
-            final_df.to_csv(config.OUTPUT_CSV, index=False, lineterminator="\n")
-            logger.info(f"✅ Tree data saved to: {config.OUTPUT_CSV} ({len(final_df)} trees)")
-        else:
-            logger.warning("⚠️ No tree data to save")
-        
-        if depth_df:
-            depth_df = pd.DataFrame(depth_df)
-            depth_df.to_csv("depth.csv", index=False)
-            logger.info(f"✅ Depth data saved to: depth.csv ({len(depth_df)} entries)")
-        
         save_time = time.time() - save_start_time
         total_time = time.time() - pipeline_start_time
         
