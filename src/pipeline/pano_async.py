@@ -78,22 +78,27 @@ def process_view(config: Config, view, tree_data, pano, image, depth, theta, i, 
 
                     try:
                         orig_point, pers_point = get_point(mask, theta, pano, config.HEIGHT, config.WIDTH, config.FOV)
+                        # Get distance from depth map
                         distance = depth[orig_point[1]][orig_point[0]]
+
+                        if orig_point[0] < 3800 or distance > 20:
+                            continue
+
                         distance_calibrated = calibrate_model.calibrate_single(distance, orig_point[0], orig_point[1])
-                        logger.info(f"Distance: {distance:.2f}m, Distance calibrated: {distance_calibrated:.2f}m")
-                        logger.info(f"Orig point: {orig_point}")
-                        logger.info(f"Depth shape: {depth.shape}")
-                        logger.info(f"Pano depth shape: {pano.depth.data.shape}")
-                        pano_depth = pano.depth.data[orig_point[1]][orig_point[0]]
-                        logger.info(f"Pano Depth distance: {pano_depth:.2f}m")
-                        lat, lon = get_coordinates(pano, orig_point, image.shape[1], distance_calibrated)
+                        lat_model, lon_model = get_coordinates(pano, orig_point, image.shape[1], distance_calibrated)
+                        
+                        # Get coordinates from Google depth map
+                        pano_depth_y = int(orig_point[1] * pano.depth.data.shape[0] / depth.shape[0])
+                        pano_depth_x = int(orig_point[0] * pano.depth.data.shape[1] / depth.shape[1])
+                        pano_distance = pano.depth.data[pano_depth_y][pano_depth_x]
+                        lat_pano, lon_pano = get_coordinates(pano, orig_point, image.shape[1], distance_calibrated)
+
+                        logger.info(f"Distance: {distance:.2f}m, Distance calibrated: {distance_calibrated:.2f}m, Pano distance: {pano_distance:.2f}m")
                         
                         # Submit image creation to thread pool
                         IO_EXECUTOR.submit(
                             make_image, view, boxes[k], mask, image_path
                         )
-                        
-                        logger.debug(f"Tree {j}-{k}: distance={distance:.2f}m, coords=({lat:.6f}, {lon:.6f})")
                         
                     except Exception as e:
                         logger.error(f"❌ Error processing tree {k} in view {i}: {e}")
@@ -104,14 +109,17 @@ def process_view(config: Config, view, tree_data, pano, image, depth, theta, i, 
                         "pano_id": pano.id,
                         "stview_lat": pano.lat,
                         "stview_lng": pano.lon,
-                        "tree_lat": lat,
-                        "tree_lng": lon,
+                        "tree_lat_model": lat_model,
+                        "tree_lng_model": lon_model,
+                        "tree_lat_pano": lat_pano,
+                        "tree_lng_pano": lon_pano,
                         "image_x": float(orig_point[0]),
                         "image_y": float(orig_point[1]),
                         "theta": theta,
                         "mask": mask,
                         "conf": conf,
-                        "distance": distance,
+                        "distance_model": distance_calibrated,
+                        "distance_pano": pano_distance,
                     }
                     trees.append(tree)
         

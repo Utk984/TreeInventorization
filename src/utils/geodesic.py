@@ -23,7 +23,16 @@ def get_coordinates(pano, point, width, distance):
     
     try:
         center = width / 2
-        bearing_radians = pano.heading / center * point[0]
+        # Calculate the horizontal angle offset from center (in degrees)
+        # For equirectangular projection, x-coordinate maps linearly to 360 degrees
+        angle_offset = ((point[0] - center) / width) * 360
+        
+        # Add offset to pano heading to get absolute bearing (in degrees)
+        bearing_degrees = (pano.heading + angle_offset) % 360
+        
+        # Convert bearing to radians for calculations
+        bearing_radians = math.radians(bearing_degrees)
+        
         R = 6371000  # Earth radius in meters
 
         # Calculate angular distance in radians
@@ -34,7 +43,7 @@ def get_coordinates(pano, point, width, distance):
         lng_rad = math.radians(pano.lon)
         
         logger.debug(f"📍 Panorama location: ({pano.lat:.6f}, {pano.lon:.6f})")
-        logger.debug(f"🧭 Bearing: {math.degrees(bearing_radians):.2f}°, Angular distance: {angular_distance:.6f} rad")
+        logger.debug(f"🧭 Bearing: {bearing_degrees:.2f}°, Angular distance: {angular_distance:.6f} rad")
         
         # Calculate new latitude using spherical trigonometry
         new_lat_rad = math.asin(
