@@ -26,11 +26,10 @@ class Config:
 
         # Configure logging - every level INFO and DEBUG are logged
         logging.basicConfig(
-            level=logging.INFO,  # DEBUG level captures DEBUG, INFO, WARNING, ERROR, CRITICAL
+            level=logging.DEBUG,  # DEBUG level captures DEBUG, INFO, WARNING, ERROR, CRITICAL
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             handlers=[
                 logging.FileHandler(os.path.join(self.LOG_DIR, f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_pipeline.log")),
-                # logging.StreamHandler()
             ]
         )
         

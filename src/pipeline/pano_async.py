@@ -88,10 +88,10 @@ def process_view(config: Config, view, tree_data, pano, image, depth, theta, i, 
                         lat_model, lon_model = get_coordinates(pano, orig_point, image.shape[1], distance_calibrated)
                         
                         # Get coordinates from Google depth map
-                        pano_depth_y = int(orig_point[1] * pano.depth.data.shape[0] / depth.shape[0])
-                        pano_depth_x = int(orig_point[0] * pano.depth.data.shape[1] / depth.shape[1])
+                        pano_depth_y = int(orig_point[1] * pano.depth.data.shape[0] / image.shape[0])
+                        pano_depth_x = int(orig_point[0] * pano.depth.data.shape[1] / image.shape[1])
                         pano_distance = pano.depth.data[pano_depth_y][pano_depth_x]
-                        lat_pano, lon_pano = get_coordinates(pano, orig_point, image.shape[1], distance_calibrated)
+                        lat_pano, lon_pano = get_coordinates(pano, orig_point, image.shape[1], pano_distance)
 
                         logger.info(f"Distance: {distance:.2f}m, Distance calibrated: {distance_calibrated:.2f}m, Pano distance: {pano_distance:.2f}m")
                         
