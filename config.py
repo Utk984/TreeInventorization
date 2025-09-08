@@ -17,13 +17,15 @@ class Config:
         self.FULL_DIR = os.path.join(self.DATA_DIR, "full")
         self.LOG_DIR = os.path.join(self.DATA_DIR, "logs")
         self.DEPTH_DIR = os.path.join(self.DATA_DIR, "depth_maps")
+        self.MASK_DIR = os.path.join(self.DATA_DIR, "masks")
 
         # Ensure output folders exist
         os.makedirs(self.VIEW_DIR, exist_ok=True)
         os.makedirs(self.FULL_DIR, exist_ok=True)
         os.makedirs(self.LOG_DIR, exist_ok=True)
         os.makedirs(self.DEPTH_DIR, exist_ok=True)
-
+        os.makedirs(self.MASK_DIR, exist_ok=True)
+        
         # Configure logging - every level INFO and DEBUG are logged
         logging.basicConfig(
             level=logging.INFO,  # DEBUG level captures DEBUG, INFO, WARNING, ERROR, CRITICAL

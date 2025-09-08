@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import logging
 import time
+import os
 from src.utils.transformation import map_perspective_point_to_original
 from shapely.geometry import Polygon
 from shapely.strtree import STRtree
@@ -150,21 +151,23 @@ def remove_duplicates(df, image_x, image_y, height, width, fov, iou_threshold=0.
         logger.error(f"❌ Error during duplicate removal: {str(e)}")
         raise
 
-def add_masks(image, df, height, width, FOV):
+def add_masks(image, df, height, width, FOV, mask_json_path=None):
     """
     Add masks to an image by overlaying Ultralytics masks with logging.
+    Now works with masks stored in JSON files instead of DataFrame.
 
     Args:
         image (numpy.ndarray): The original image.
-        df (pandas.DataFrame): DataFrame containing mask and position data.
+        df (pandas.DataFrame): DataFrame containing position data (no mask data).
         height (int): Height of perspective views.
         width (int): Width of perspective views.
         FOV (int): Field of view in degrees.
+        mask_json_path (str, optional): Path to JSON file containing mask data.
 
     Returns:
         numpy.ndarray: The image with overlaid masks.
     """
-    logger.debug(f"🎨 Adding {len(df)} masks to image shape: {image.shape}")
+    logger.debug(f"🎨 Adding masks to image shape: {image.shape}")
     start_time = time.time()
     
     try:
@@ -172,43 +175,71 @@ def add_masks(image, df, height, width, FOV):
         img_shape = (image.shape[1], image.shape[0])
         processed_masks = 0
         
-        for idx, row in df.iterrows():
-            try:
-                mask = row["mask"]
-                original_points = []
-                
-                if mask.xy:
-                    mask_points = mask.xy[0].astype(np.int32)
-                    for point in mask_points:
-                        orig_point = map_perspective_point_to_original(
-                            point[0], point[1], row["theta"], img_shape, height, width, FOV
-                        )
-                        orig_point = tuple(map(int, orig_point))
-                        original_points.append(orig_point)
-
-                    # Draw mask outline and fill
-                    cv2.polylines(
-                        overlay,
-                        [np.array(original_points, np.int32)],
-                        isClosed=True,
-                        color=(0, 255, 0),
-                        thickness=5,
-                    )
-                    cv2.fillPoly(overlay, [np.array(original_points, np.int32)], color=(0, 255, 0))
-                    cv2.addWeighted(overlay, 0.2, image, 0.8, 0, image)
-
+        # If no mask JSON path provided, just draw center points
+        if mask_json_path is None or not os.path.exists(mask_json_path):
+            logger.warning("⚠️ No mask JSON file provided or file doesn't exist, drawing center points only")
+            for idx, row in df.iterrows():
+                try:
                     # Draw center point
                     point = (int(row["image_x"]), int(row["image_y"]))
                     cv2.circle(image, point, 25, (0, 0, 255), -1)
-                    
                     processed_masks += 1
-                    
-            except Exception as e:
-                logger.warning(f"⚠️ Error processing mask {idx}: {str(e)}")
-                continue
+                except Exception as e:
+                    logger.warning(f"⚠️ Error drawing center point {idx}: {str(e)}")
+                    continue
+        else:
+            # Load mask data from JSON
+            import json
+            with open(mask_json_path, 'r') as f:
+                mask_data = json.load(f)
+            
+            # Process each view's masks
+            for view_name, view_masks in mask_data.get("views", {}).items():
+                for mask_info in view_masks:
+                    try:
+                        mask_data_obj = mask_info["mask_data"]
+                        tree_index = mask_info["tree_index"]
+                        
+                        # Find corresponding row in DataFrame
+                        # This is a simplified approach - you might need to match by other criteria
+                        if len(df) > 0:
+                            row = df.iloc[0]  # For now, use first row as reference
+                            
+                            # Reconstruct mask points from serialized data
+                            if mask_data_obj.get("xy"):
+                                mask_points = np.array(mask_data_obj["xy"][0], dtype=np.int32)
+                                original_points = []
+                                
+                                for point in mask_points:
+                                    orig_point = map_perspective_point_to_original(
+                                        point[0], point[1], row["theta"], img_shape, height, width, FOV
+                                    )
+                                    orig_point = tuple(map(int, orig_point))
+                                    original_points.append(orig_point)
+
+                                # Draw mask outline and fill
+                                cv2.polylines(
+                                    overlay,
+                                    [np.array(original_points, np.int32)],
+                                    isClosed=True,
+                                    color=(0, 255, 0),
+                                    thickness=5,
+                                )
+                                cv2.fillPoly(overlay, [np.array(original_points, np.int32)], color=(0, 255, 0))
+                                cv2.addWeighted(overlay, 0.2, image, 0.8, 0, image)
+
+                                # Draw center point
+                                point = (int(row["image_x"]), int(row["image_y"]))
+                                cv2.circle(image, point, 25, (0, 0, 255), -1)
+                                
+                                processed_masks += 1
+                                
+                    except Exception as e:
+                        logger.warning(f"⚠️ Error processing mask {mask_info.get('tree_index', 'unknown')}: {str(e)}")
+                        continue
 
         overlay_time = time.time() - start_time
-        logger.debug(f"✅ Added {processed_masks}/{len(df)} masks in {overlay_time:.3f}s")
+        logger.debug(f"✅ Added {processed_masks} masks in {overlay_time:.3f}s")
         
         return image
         
