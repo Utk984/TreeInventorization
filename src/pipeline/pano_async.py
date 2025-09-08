@@ -14,7 +14,7 @@ from src.inference.depth import estimate_depth
 from src.utils.unwrap import divide_panorama
 from src.utils.masks import add_masks, remove_duplicates, make_image
 from src.utils.transformation import get_point
-from src.utils.geodesic import get_coordinates
+from src.utils.geodesic import get_coordinates, localize_pixel_with_depth, get_depth_at_pixel
 from concurrent.futures import ThreadPoolExecutor
 
 # Configure logger for pipeline
@@ -79,22 +79,22 @@ def process_view(config: Config, view, tree_data, pano, image, depth, theta, i, 
                     try:
                         orig_point, pers_point = get_point(mask, theta, pano, config.HEIGHT, config.WIDTH, config.FOV)
                         # Get distance from depth map
-                        distance = depth[orig_point[1]][orig_point[0]]
-
-                        if orig_point[0] < 3800 or distance > 20:
-                            continue
-
-                        distance_calibrated = calibrate_model.calibrate_single(distance, orig_point[0], orig_point[1])
-                        lat_model, lon_model = get_coordinates(pano, orig_point, image.shape[1], distance_calibrated)
+                        W, H = image.shape[1], image.shape[0]
                         
-                        # Get coordinates from Google depth map
-                        scale_factor_x = pano.depth.data.shape[1] / image.shape[1]
-                        scale_factor_y = pano.depth.data.shape[0] / image.shape[0]
-                        mapped_points_depth_map = [(int((image.shape[1] - x) * scale_factor_x)%pano.depth.data.shape[1], int(y * scale_factor_y)%pano.depth.data.shape[0]) for x, y in orig_point]
-                        pano_distance = pano.depth.data[mapped_points_depth_map[0]][mapped_points_depth_map[1]]
-                        lat_pano, lon_pano = get_coordinates(pano, orig_point, image.shape[1], pano_distance)
+                        distance_pano = get_depth_at_pixel(pano.depth, orig_point[0], orig_point[1], W, H, flipped=True, method="bilinear")
+                        if distance_pano is None:
+                            logger.warning(f"⚠️ No depth map for {pano.id} at {orig_point[0]}, {orig_point[1]}")
+                            continue
+                        if distance_pano > 15:
+                            logger.warning(f"⚠️ Distance too far for {pano.id} at {orig_point[0]}, {orig_point[1]}")
+                            continue
+                        lat_pano, lon_pano = localize_pixel_with_depth(pano, orig_point[0], orig_point[1], W, H, distance_pano)
 
-                        logger.info(f"Distance: {distance:.2f}m, Distance calibrated: {distance_calibrated:.2f}m, Pano distance: {pano_distance:.2f}m")
+                        distance_model = depth[orig_point[1]][orig_point[0]]
+                        distance_calibrated = calibrate_model.calibrate_single(distance_model, orig_point[0], orig_point[1])
+                        lat_model, lon_model = localize_pixel_with_depth(pano, orig_point[0], orig_point[1], image.shape[1], image.shape[0], distance_calibrated)
+                        
+                        logger.info(f"Model distance: {distance_calibrated:.2f}m, Pano distance: {distance_pano:.2f}m")
                         
                         # Submit image creation to thread pool
                         IO_EXECUTOR.submit(
@@ -120,7 +120,7 @@ def process_view(config: Config, view, tree_data, pano, image, depth, theta, i, 
                         "mask": mask,
                         "conf": conf,
                         "distance_model": distance_calibrated,
-                        "distance_pano": pano_distance,
+                        "distance_pano": distance_pano,
                     }
                     trees.append(tree)
         
