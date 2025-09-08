@@ -1,0 +1,5 @@
+names:
+  0: tree
+  1: trunk
+path: .
+train: train.txt

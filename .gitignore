@@ -4,17 +4,13 @@
 cache/
 data/
 images/
-utils1/
-images/panoramas
-images/predict
-.DS_Store
-__pycache__/
-utils/__pycache__/
-utils/.DS_Store
-treemodel/__pycache__/
-treemodel/.DS_Store
+*.DS_Store
+*__pycache__/
 runs
 panoramas
+eval/*.html
+models
+Untitled.ipynb
 
 # From python gitignore template
 # Byte-compiled / optimized / DLL files
