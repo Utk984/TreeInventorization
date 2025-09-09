@@ -11,6 +11,7 @@ from config import Config
 from aiohttp import ClientSession
 from src.inference.segment import detect_trees
 from src.inference.depth import estimate_depth
+from src.inference.mask import verify_mask
 from src.utils.unwrap import divide_panorama
 from src.utils.masks import add_masks, remove_duplicates, make_image
 from src.utils.transformation import get_point
@@ -56,11 +57,12 @@ async def fetch_pano_by_id(pano_id: str, session: ClientSession):
         logger.error(f"❌ Error fetching panorama {pano_id}: {str(e)}")
         return None, None
 
-def process_view(config: Config, view, tree_data, pano, image, depth, theta, i, calibrate_model):
+def process_view(config: Config, view, tree_data, pano, image, depth, theta, i, calibrate_model, mask_model):
     """Process a single view with detailed logging."""
     logger.debug(f"🔄 Processing view {i} at theta={theta}°")
     trees = []
-    view_masks = []
+    tree_masks = []  # List of mask objects corresponding to trees
+    view_masks = []  # For JSON serialization
     tree_count = 0
     
     try:
@@ -102,8 +104,13 @@ def process_view(config: Config, view, tree_data, pano, image, depth, theta, i, 
                         IO_EXECUTOR.submit(
                             make_image, view, boxes[k], mask, image_path
                         )
+
+                        # Verify mask
+                        # usable, prob = verify_mask(image, mask_model)
+                        # if not usable and prob > 0.5:
+                        #     logger.warning(f"⚠️ Mask not usable for {pano.id} at {orig_point[0]}, {orig_point[1]}")
+                        #     continue
                         
-                        # Serialize mask for JSON storage
                         serialized_mask = serialize_ultralytics_mask(mask)
                         view_masks.append({
                             "tree_index": f"{j}-{k}",
@@ -133,14 +140,15 @@ def process_view(config: Config, view, tree_data, pano, image, depth, theta, i, 
                         "distance_pano": distance_pano,
                     }
                     trees.append(tree)
+                    tree_masks.append(mask)  # Keep mask separately
         
-        return trees, view_masks
+        return trees, tree_masks, view_masks
         
     except Exception as e:
         logger.error(f"❌ Error processing view {i}: {str(e)}")
         return [], []
 
-async def process_panoramas(config: Config, depth_model, tree_model, calibrate_model):
+async def process_panoramas(config: Config, depth_model, tree_model, calibrate_model, mask_model):
     """Main panorama processing function with comprehensive logging."""
     logger.info("🚀 Starting panorama processing pipeline")
     pipeline_start_time = time.time()
@@ -196,14 +204,16 @@ async def process_panoramas(config: Config, depth_model, tree_model, calibrate_m
 
                     # Process each view
                     trees = []
-                    all_view_masks = {}
+                    all_masks = []  # Parallel list of mask objects
+                    all_view_masks = {}  # For JSON serialization
                     for i, (view, theta) in enumerate(views):
                         logger.debug(f"🔍 Detecting trees in view {i}")
                         tree_data = detect_trees(view, tree_model, config.DEVICE)
-                        view_trees, view_masks = process_view(config, view, tree_data, pano, image, depth, theta, i, calibrate_model)
+                        view_trees, tree_masks, view_masks = process_view(config, view, tree_data, pano, image, depth, theta, i, calibrate_model, mask_model)
                         trees.extend(view_trees)
+                        all_masks.extend(tree_masks)  # Collect masks separately
                         
-                        # Store masks for this view
+                        # Store masks for this view (for JSON serialization)
                         if view_masks:
                             view_path = f"view_{i}"
                             all_view_masks[view_path] = view_masks
@@ -224,8 +234,9 @@ async def process_panoramas(config: Config, depth_model, tree_model, calibrate_m
                     # Remove duplicates
                     logger.debug("🔄 Removing duplicate detections")
                     dedup_start_time = time.time()
-                    df_part = remove_duplicates(
+                    df_part, masks_part = remove_duplicates(
                         pd.DataFrame(trees),
+                        all_masks,  # Pass masks separately
                         image.shape[1], image.shape[0],
                         config.HEIGHT, config.WIDTH, config.FOV
                     )

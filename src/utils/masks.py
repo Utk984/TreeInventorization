@@ -50,13 +50,23 @@ def make_image(view, box, mask, image_path):
         logger.error(f"❌ Error creating tree image {image_path}: {str(e)}")
         raise
 
-def remove_duplicates(df, image_x, image_y, height, width, fov, iou_threshold=0.4):
+def remove_duplicates(df, masks, image_x, image_y, height, width, fov, iou_threshold=0.4):
     """
     Remove duplicate detections with comprehensive logging.
     * Converts each mask to a Shapely Polygon (no giant binary images)
     * Uses an STRtree to query only potentially overlapping pairs
+    
+    Args:
+        df: DataFrame with detection data (without mask column)
+        masks: List of Ultralytics mask objects corresponding to each row in df
+        image_x, image_y: Image dimensions
+        height, width, fov: Perspective view parameters
+        iou_threshold: IoU threshold for duplicate removal
+        
+    Returns:
+        tuple: (filtered_df, filtered_masks) - DataFrame and masks list with duplicates removed
     """
-    logger.debug(f"🔄 Starting duplicate removal - {len(df)} initial detections")
+    logger.info(f"🔄 Starting duplicate removal - {len(df)} initial detections")
     start_time = time.time()
     
     try:
@@ -66,8 +76,8 @@ def remove_duplicates(df, image_x, image_y, height, width, fov, iou_threshold=0.
         conversion_start = time.time()
         valid_masks = 0
         
-        for idx, (mask, th) in enumerate(zip(df["mask"], df["theta"])):
-            if not mask.xy:
+        for idx, (mask, th) in enumerate(zip(masks, df["theta"])):
+            if mask is None or not hasattr(mask, 'xy') or not mask.xy:
                 continue
 
             try:
@@ -97,8 +107,8 @@ def remove_duplicates(df, image_x, image_y, height, width, fov, iou_threshold=0.
         logger.debug(f"📐 Converted {valid_masks}/{len(df)} masks to polygons in {conversion_time:.3f}s")
 
         if not polys:
-            logger.warning("⚠️ No valid polygons found, returning empty DataFrame")
-            return df.iloc[0:0]        
+            logger.warning("⚠️ No valid polygons found, returning empty DataFrame and masks")
+            return df.iloc[0:0], []        
         
         # Build spatial index and find overlaps
         dedup_start = time.time()
@@ -141,11 +151,14 @@ def remove_duplicates(df, image_x, image_y, height, width, fov, iou_threshold=0.
         keep_df_idx = [idx_map[k] for k in keep]
         result_df = df.iloc[keep_df_idx].reset_index(drop=True)
         
-        total_time = time.time() - start_time
-        logger.debug(f"✅ Duplicate removal completed in {total_time:.3f}s")
-        logger.debug(f"📊 Removed {removed_count} duplicates, kept {len(result_df)}/{len(df)} detections")
+        # Filter masks to match the kept DataFrame rows
+        result_masks = [masks[idx] for idx in keep_df_idx]
         
-        return result_df
+        total_time = time.time() - start_time
+        logger.info(f"✅ Duplicate removal completed in {total_time:.3f}s")
+        logger.info(f"📊 Removed {removed_count} duplicates, kept {len(result_df)}/{len(df)} detections")
+        
+        return result_df, result_masks
         
     except Exception as e:
         logger.error(f"❌ Error during duplicate removal: {str(e)}")
@@ -190,6 +203,7 @@ def add_masks(image, df, height, width, FOV, mask_json_path=None):
         else:
             # Load mask data from JSON
             import json
+            from src.utils.mask_serialization import deserialize_ultralytics_mask
             with open(mask_json_path, 'r') as f:
                 mask_data = json.load(f)
             
@@ -205,17 +219,21 @@ def add_masks(image, df, height, width, FOV, mask_json_path=None):
                         if len(df) > 0:
                             row = df.iloc[0]  # For now, use first row as reference
                             
-                            # Reconstruct mask points from serialized data
-                            if mask_data_obj.get("xy"):
-                                mask_points = np.array(mask_data_obj["xy"][0], dtype=np.int32)
-                                original_points = []
-                                
-                                for point in mask_points:
-                                    orig_point = map_perspective_point_to_original(
-                                        point[0], point[1], row["theta"], img_shape, height, width, FOV
-                                    )
-                                    orig_point = tuple(map(int, orig_point))
-                                    original_points.append(orig_point)
+                            # Deserialize mask (handles both RLE and polygon formats)
+                            deserialized_mask = deserialize_ultralytics_mask(mask_data_obj)
+                            
+                            # Reconstruct mask points from deserialized data
+                            if deserialized_mask.get("xy") and len(deserialized_mask["xy"]) > 0:
+                                mask_points = deserialized_mask["xy"][0]
+                                if isinstance(mask_points, np.ndarray) and len(mask_points) > 0:
+                                    original_points = []
+                                    
+                                    for point in mask_points:
+                                        orig_point = map_perspective_point_to_original(
+                                            point[0], point[1], row["theta"], img_shape, height, width, FOV
+                                        )
+                                        orig_point = tuple(map(int, orig_point))
+                                        original_points.append(orig_point)
 
                                 # Draw mask outline and fill
                                 cv2.polylines(
