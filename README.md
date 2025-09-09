@@ -161,3 +161,21 @@ The evaluation system provides:
 - **Matches %**: Percentage of correct panorama matches
 - **Distance thresholds**: Configurable matching distances (3m, 5m)
 - **Duplicate removal**: Configurable duplicate detection (2m, 5m)
+
+## TODO
+
+Future improvements and planned features:
+
+- [x] **Flag-based saving for depth maps and segmentation masks** - Add config flags to optionally save intermediate processing results (depth maps, segmentation masks) for debugging and analysis purposes.
+
+- [ ] **Multiview triangulation** - Implement triangulation algorithms to improve tree localization accuracy by combining detections from multiple panorama viewpoints.
+
+- [ ] **Improve tree detection model** - Enhance the current tree segmentation model with better training data, architecture improvements, or ensemble methods for higher accuracy.
+
+- [ ] **Redo depth anything + regression pipeline** - Refactor the depth estimation pipeline to improve the integration between DepthAnything model and the regression-based depth calibration system.
+
+## Acknowledgment
+
+Developers: [Utkarsh Agarwal](https://github.com/Utk984), [Malhar Bhise](https://github.com/coolperson111)
+
+This project was undertaken in collaboration with the [Geospatial Computer Vision Group](https://anupamsobti.github.io/geospatial-computer-vision/) led by [Dr. Anupam Sobti](https://anupamsobti.github.io/). We are grateful for the support and guidance provided throughout the development of this project.

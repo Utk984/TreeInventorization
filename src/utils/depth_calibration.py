@@ -32,39 +32,48 @@ from pathlib import Path
 import joblib
 import seaborn as sns
 import warnings
+import logging
+import time
+
 warnings.filterwarnings('ignore')
+
+# Configure logger for depth calibration
+logger = logging.getLogger(__name__)
 
 
 def load_and_clean_data(csv_path):
     """Load depth data and remove invalid entries."""
+    logger.info(f"📊 Loading depth calibration data from: {csv_path}")
+    start_time = time.time()
+    
     df = pd.read_csv(csv_path)
     
-    print(f"Original data points: {len(df)}")
+    logger.info(f"📈 Original data points: {len(df)}")
     
     # Remove invalid Google depth values (-1.0 indicates no depth data)
     df_clean = df[df['google_depth'] != -1.0].copy()
     
-    print(f"Valid data points after removing -1.0 values: {len(df_clean)}")
-    print(f"Removed {len(df) - len(df_clean)} invalid points")
+    load_time = time.time() - start_time
+    logger.info(f"✅ Data loaded and cleaned in {load_time:.3f}s")
+    logger.info(f"📊 Valid data points: {len(df_clean)} (removed {len(df) - len(df_clean)} invalid)")
     
     return df_clean
 
 
 def analyze_data_distribution(df):
     """Analyze the distribution of features."""
-    print("\n" + "="*50)
-    print("DATA DISTRIBUTION ANALYSIS")
-    print("="*50)
+    logger.info("📊 Analyzing data distribution")
     
     for col in ['pred_depth', 'google_depth', 'image_x', 'image_y']:
-        print(f"{col:12} - Mean: {df[col].mean():8.2f}, Std: {df[col].std():8.2f}, "
-              f"Min: {df[col].min():8.2f}, Max: {df[col].max():8.2f}")
-    
-    print("="*50)
+        logger.info(f"📈 {col:12} - Mean: {df[col].mean():8.2f}, Std: {df[col].std():8.2f}, "
+                   f"Min: {df[col].min():8.2f}, Max: {df[col].max():8.2f}")
 
 
 def train_simple_linear(df):
     """Train simple linear regression: google_depth = slope * pred_depth + intercept"""
+    logger.debug("🔄 Training Simple Linear Regression model")
+    start_time = time.time()
+    
     X = df[['pred_depth']].values
     y = df['google_depth'].values
     
@@ -80,6 +89,9 @@ def train_simple_linear(df):
     cv_scores = cross_val_score(model, X, y, cv=5, scoring='r2')
     cv_mean = cv_scores.mean()
     cv_std = cv_scores.std()
+    
+    train_time = time.time() - start_time
+    logger.info(f"✅ Simple Linear trained in {train_time:.3f}s - R²: {r2:.4f}, RMSE: {rmse:.4f}")
     
     return {
         'name': 'Simple Linear',
@@ -242,44 +254,40 @@ def train_svr_rbf(df):
 
 def compare_models(df):
     """Train and compare all models."""
-    print("\n" + "="*80)
-    print("TRAINING ALL MODELS")
-    print("="*80)
+    logger.info("🔄 Training and comparing all calibration models")
+    comparison_start_time = time.time()
     
     models = []
     
     # Train all models
-    print("Training Simple Linear...")
+    logger.info("🔄 Training Simple Linear...")
     models.append(train_simple_linear(df))
     
-    print("Training Multiple Linear...")
+    logger.info("🔄 Training Multiple Linear...")
     models.append(train_multiple_linear(df))
     
-    print("Training Polynomial (degree=2)...")
+    logger.info("🔄 Training Polynomial (degree=2)...")
     models.append(train_polynomial(df, degree=2))
     
-    print("Training Polynomial (degree=3)...")
+    logger.info("🔄 Training Polynomial (degree=3)...")
     models.append(train_polynomial(df, degree=3))
     
-    print("Training Random Forest...")
+    logger.info("🔄 Training Random Forest...")
     models.append(train_random_forest(df))
     
-    print("Training SVR with RBF kernel...")
+    logger.info("🔄 Training SVR with RBF kernel...")
     models.append(train_svr_rbf(df))
     
     # Sort by R² score
     models.sort(key=lambda x: x['r2'], reverse=True)
     
-    print("\n" + "="*80)
-    print("MODEL COMPARISON RESULTS")
-    print("="*80)
-    print(f"{'Model':<20} {'R²':<8} {'RMSE':<8} {'MAE':<8} {'CV R² (mean±std)':<20}")
-    print("-" * 80)
+    comparison_time = time.time() - comparison_start_time
+    logger.info(f"✅ Model comparison completed in {comparison_time:.3f}s")
+    logger.info("📊 MODEL COMPARISON RESULTS")
+    logger.info(f"{'Model':<20} {'R²':<8} {'RMSE':<8} {'MAE':<8} {'CV R² (mean±std)':<20}")
     
     for model in models:
-        print(f"{model['name']:<20} {model['r2']:<8.4f} {model['rmse']:<8.4f} {model['mae']:<8.4f} {model['cv_r2_mean']:.4f}±{model['cv_r2_std']:.4f}")
-    
-    print("="*80)
+        logger.info(f"{model['name']:<20} {model['r2']:<8.4f} {model['rmse']:<8.4f} {model['mae']:<8.4f} {model['cv_r2_mean']:.4f}±{model['cv_r2_std']:.4f}")
     
     return models
 
@@ -405,7 +413,7 @@ def create_comprehensive_plots(df, models):
     plt.savefig('eval/depth_calibration_comparison.png', dpi=300, bbox_inches='tight')
     plt.show()
     
-    print(f"Comprehensive comparison plots saved to eval/depth_calibration_comparison.png")
+    logger.info(f"📊 Comprehensive comparison plots saved to eval/depth_calibration_comparison.png")
 
 
 def save_best_model(df, models, output_path):
@@ -447,24 +455,27 @@ def save_best_model(df, models, output_path):
         for model in models:
             f.write(f"{model['name']:<20} {model['r2']:<8.4f} {model['rmse']:<8.4f} {model['mae']:<8.4f} {model['cv_r2_mean']:.4f}±{model['cv_r2_std']:.4f}\n")
     
-    print(f"Best model results saved to: {output_path}")
-    print(f"Best model saved to: {model_path}")
-    print(f"Detailed results saved to: {results_path}")
+    logger.info(f"💾 Best model results saved to: {output_path}")
+    logger.info(f"💾 Best model saved to: {model_path}")
+    logger.info(f"💾 Detailed results saved to: {results_path}")
 
 
 def main():
+    logger.info("🚀 Starting depth calibration pipeline")
+    pipeline_start_time = time.time()
+    
     input_path = Path("eval/tree_depth_values.csv")
     output_path = Path("eval/tree_depth_calibrated_best.csv")
     
     if not input_path.exists():
-        print(f"Error: {input_path} not found. Run extract_depth_values.py first.")
+        logger.error(f"❌ Input file not found: {input_path}. Run extract_depth_values.py first.")
         return
     
     # Load and clean data
     df = load_and_clean_data(input_path)
     
     if len(df) < 10:
-        print("Error: Not enough valid data points for regression.")
+        logger.error("❌ Not enough valid data points for regression.")
         return
     
     # Analyze data distribution
@@ -474,28 +485,29 @@ def main():
     models = compare_models(df)
     
     # Create comprehensive plots
+    logger.info("📊 Creating comprehensive visualization plots")
     create_comprehensive_plots(df, models)
     
     # Save best model and results
+    logger.info("💾 Saving best model and results")
     save_best_model(df, models, output_path)
     
     # Print final summary
     best_model = models[0]
-    print("\n" + "="*80)
-    print("FINAL SUMMARY")
-    print("="*80)
-    print(f"Best performing model: {best_model['name']}")
-    print(f"R² Score: {best_model['r2']:.4f}")
-    print(f"RMSE: {best_model['rmse']:.4f} meters")
-    print(f"MAE: {best_model['mae']:.4f} meters")
-    print(f"Cross-validation R²: {best_model['cv_r2_mean']:.4f} ± {best_model['cv_r2_std']:.4f}")
+    total_time = time.time() - pipeline_start_time
+    
+    logger.info("🎉 DEPTH CALIBRATION PIPELINE COMPLETED")
+    logger.info(f"⏱️ Total pipeline time: {total_time:.3f}s")
+    logger.info(f"🏆 Best performing model: {best_model['name']}")
+    logger.info(f"📊 R² Score: {best_model['r2']:.4f}")
+    logger.info(f"📏 RMSE: {best_model['rmse']:.4f} meters")
+    logger.info(f"📏 MAE: {best_model['mae']:.4f} meters")
+    logger.info(f"🔄 Cross-validation R²: {best_model['cv_r2_mean']:.4f} ± {best_model['cv_r2_std']:.4f}")
     
     if 'feature_importance' in best_model:
-        print(f"\nFeature Importance:")
+        logger.info("🔍 Feature Importance:")
         for feature, importance in best_model['feature_importance'].items():
-            print(f"  {feature}: {importance:.4f}")
-    
-    print("="*80)
+            logger.info(f"  {feature}: {importance:.4f}")
 
 
 if __name__ == "__main__":

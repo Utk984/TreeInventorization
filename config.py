@@ -18,6 +18,7 @@ class Config:
         self.LOG_DIR = os.path.join(self.DATA_DIR, "logs")
         self.DEPTH_DIR = os.path.join(self.DATA_DIR, "depth_maps")
         self.MASK_DIR = os.path.join(self.DATA_DIR, "masks")
+        self.OUTPUT_DIR = os.path.join(self.ROOT_DIR, "outputs")
 
         # Ensure output folders exist
         os.makedirs(self.VIEW_DIR, exist_ok=True)
@@ -25,7 +26,8 @@ class Config:
         os.makedirs(self.LOG_DIR, exist_ok=True)
         os.makedirs(self.DEPTH_DIR, exist_ok=True)
         os.makedirs(self.MASK_DIR, exist_ok=True)
-        
+        os.makedirs(self.OUTPUT_DIR, exist_ok=True)
+
         # Configure logging - every level INFO and DEBUG are logged
         logging.basicConfig(
             level=logging.INFO,  # DEBUG level captures DEBUG, INFO, WARNING, ERROR, CRITICAL
@@ -39,11 +41,11 @@ class Config:
         self.PANORAMA_CSV = os.path.join(self.ROOT_DIR, "streetviews/chandigarh_28_29.csv")
 
         # Output CSV
-        self.OUTPUT_CSV = os.path.join(self.ROOT_DIR, "tree_data.csv")
+        self.OUTPUT_CSV = os.path.join(self.OUTPUT_DIR, "tree_data.csv")
 
         # Model config
         self.TREE_MODEL_PATH = os.path.join(
-            self.ROOT_DIR, "models", "TreeModel", "weights", "best.pt"
+            self.ROOT_DIR, "models", "TreeModelV3", "weights", "best.pt"
         )
 
         self.DEPTH_MODEL_PATH = os.path.join(
@@ -75,6 +77,10 @@ class Config:
 
         # Logging
         self.LOG_FILE = os.path.join(self.LOG_DIR, "pipeline.log")
+
+        # Save data
+        self.SAVE_DEPTH_MAPS = False
+        self.SAVE_MASK_JSON = False
 
         # Optional: Cloud/DB/API keys
         #self.CLOUD_STORAGE_BUCKET = os.getenv("CLOUD_STORAGE_BUCKET")

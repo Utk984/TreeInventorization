@@ -7,16 +7,16 @@ from streetlevel import streetview
 import asyncio
 import logging
 import time
+import re
 from config import Config
 from aiohttp import ClientSession
-from src.inference.segment import detect_trees
+from src.inference.segment import detect_trunks, detect_trees
 from src.inference.depth import estimate_depth
 from src.inference.mask import verify_mask
 from src.utils.unwrap import divide_panorama
-from src.utils.masks import add_masks, remove_duplicates, make_image
+from src.utils.masks import add_masks, remove_duplicates, make_image, serialize_ultralytics_mask, save_panorama_masks
 from src.utils.transformation import get_point
-from src.utils.geodesic import get_coordinates, localize_pixel_with_depth, get_depth_at_pixel
-from src.utils.mask_serialization import serialize_ultralytics_mask, save_panorama_masks
+from src.utils.geodesic import localize_pixel_with_depth, get_depth_at_pixel
 from concurrent.futures import ThreadPoolExecutor
 
 # Configure logger for pipeline
@@ -62,7 +62,6 @@ def process_view(config: Config, view, tree_data, pano, image, depth, theta, i, 
     logger.debug(f"🔄 Processing view {i} at theta={theta}°")
     trees = []
     tree_masks = []  # List of mask objects corresponding to trees
-    view_masks = []  # For JSON serialization
     tree_count = 0
     
     try:
@@ -85,7 +84,7 @@ def process_view(config: Config, view, tree_data, pano, image, depth, theta, i, 
                         # Get distance from depth map
                         W, H = image.shape[1], image.shape[0]
                         
-                        distance_pano = get_depth_at_pixel(pano.depth, orig_point[0], orig_point[1], W, H, flipped=True, method="bilinear")
+                        distance_pano = get_depth_at_pixel(pano.depth, orig_point[0], orig_point[1], W, H, flipped=True)
                         if distance_pano is None:
                             logger.warning(f"⚠️ No depth map for {pano.id} at {orig_point[0]}, {orig_point[1]}")
                             continue
@@ -111,14 +110,6 @@ def process_view(config: Config, view, tree_data, pano, image, depth, theta, i, 
                         #     logger.warning(f"⚠️ Mask not usable for {pano.id} at {orig_point[0]}, {orig_point[1]}")
                         #     continue
                         
-                        serialized_mask = serialize_ultralytics_mask(mask)
-                        view_masks.append({
-                            "tree_index": f"{j}-{k}",
-                            "image_path": image_path,
-                            "confidence": conf,
-                            "mask_data": serialized_mask
-                        })
-                        
                     except Exception as e:
                         logger.error(f"❌ Error processing tree {k} in view {i}: {e}")
                         continue
@@ -130,8 +121,8 @@ def process_view(config: Config, view, tree_data, pano, image, depth, theta, i, 
                         "stview_lng": pano.lon,
                         "tree_lat_model": lat_model,
                         "tree_lng_model": lon_model,
-                        "tree_lat_pano": lat_pano,
-                        "tree_lng_pano": lon_pano,
+                        "tree_lat": lat_pano,
+                        "tree_lng": lon_pano,
                         "image_x": float(orig_point[0]),
                         "image_y": float(orig_point[1]),
                         "theta": theta,
@@ -142,7 +133,7 @@ def process_view(config: Config, view, tree_data, pano, image, depth, theta, i, 
                     trees.append(tree)
                     tree_masks.append(mask)  # Keep mask separately
         
-        return trees, tree_masks, view_masks
+        return trees, tree_masks
         
     except Exception as e:
         logger.error(f"❌ Error processing view {i}: {str(e)}")
@@ -156,8 +147,10 @@ async def process_panoramas(config: Config, depth_model, tree_model, calibrate_m
     try:
         # Load panorama IDs
         logger.info(f"📋 Loading panorama IDs from: {config.PANORAMA_CSV}")
+        load_start_time = time.time()
         pano_ids = pd.read_csv(config.PANORAMA_CSV)["pano_id"].tolist()
-        logger.info(f"📊 Found {len(pano_ids)} panoramas to process")
+        load_time = time.time() - load_start_time
+        logger.info(f"✅ Loaded {len(pano_ids)} panoramas in {load_time:.3f}s")
 
         processed_count = 0
         skipped_count = 0
@@ -185,55 +178,49 @@ async def process_panoramas(config: Config, depth_model, tree_model, calibrate_m
                     logger.info(f"🔄 Processing panorama {idx}/{len(pano_ids)}: {pano.id}")
                     
                     # Depth estimation
-                    logger.debug("🔍 Starting depth estimation")
+                    logger.info("🔍 Starting depth estimation")
                     depth_start_time = time.time()
                     depth = estimate_depth(image, depth_model)
                     depth_time = time.time() - depth_start_time
-                    logger.debug(f"✅ Depth estimation completed in {depth_time:.2f}s")
+                    logger.info(f"✅ Depth estimation completed in {depth_time:.3f}s")
                     
                     # Persist depth maps to disk to avoid keeping them all in memory
-                    # np.save(os.path.join(config.DEPTH_DIR, f"{pano.id}_gdepth.npy"), pano.depth.data)
-                    # np.save(os.path.join(config.DEPTH_DIR, f"{pano.id}_pred.npy"), depth)
+                    if config.SAVE_DEPTH_MAPS:
+                        np.save(os.path.join(config.DEPTH_DIR, f"{pano.id}_gdepth.npy"), pano.depth.data)
+                        np.save(os.path.join(config.DEPTH_DIR, f"{pano.id}_pred.npy"), depth)
                     
                     # Generate perspective views
-                    logger.debug("🔄 Generating perspective views")
+                    logger.info("🔄 Generating perspective views")
                     view_start_time = time.time()
                     views = divide_panorama(image, config.HEIGHT, config.WIDTH, config.FOV)
                     view_time = time.time() - view_start_time
-                    logger.debug(f"✅ Generated {len(views)} perspective views in {view_time:.2f}s")
+                    logger.info(f"✅ Generated {len(views)} perspective views in {view_time:.3f}s")
 
                     # Process each view
                     trees = []
-                    all_masks = []  # Parallel list of mask objects
-                    all_view_masks = {}  # For JSON serialization
+                    all_masks = []  # List of mask objects for deduplication
+                    view_processing_start = time.time()
                     for i, (view, theta) in enumerate(views):
-                        logger.debug(f"🔍 Detecting trees in view {i}")
-                        tree_data = detect_trees(view, tree_model, config.DEVICE)
-                        view_trees, tree_masks, view_masks = process_view(config, view, tree_data, pano, image, depth, theta, i, calibrate_model, mask_model)
+                        logger.debug(f"🔍 Detecting trunks in view {i}")
+                        tree_data = detect_trunks(view, tree_model, config.DEVICE)
+                        view_trees, tree_masks = process_view(config, view, tree_data, pano, image, depth, theta, i, calibrate_model, mask_model)
                         trees.extend(view_trees)
-                        all_masks.extend(tree_masks)  # Collect masks separately
-                        
-                        # Store masks for this view (for JSON serialization)
-                        if view_masks:
-                            view_path = f"view_{i}"
-                            all_view_masks[view_path] = view_masks
+                        all_masks.extend(tree_masks)  # Collect masks for deduplication
+                    
+                    view_processing_time = time.time() - view_processing_start
+                    logger.info(f"✅ View processing completed in {view_processing_time:.3f}s")
 
                     if not trees:
-                        logger.debug(f"🌳 No trees found in panorama {pano.id}")
+                        logger.info(f"🌳 No trunks found in panorama {pano.id}")
                         skipped_count += 1
                         continue
 
-                    logger.info(f"🌳 Found {len(trees)} trees in panorama {pano.id}")
-                    
-                    # Save masks to JSON file
-                    if all_view_masks:
-                        logger.debug(f"💾 Saving masks for panorama {pano.id}")
-                        mask_json_path = save_panorama_masks(pano.id, all_view_masks, config)
-                        logger.info(f"✅ Masks saved to {mask_json_path}")
+                    logger.info(f"🌳 Found {len(trees)} trunks in panorama {pano.id}")
                     
                     # Remove duplicates
-                    logger.debug("🔄 Removing duplicate detections")
+                    logger.info("🔄 Removing duplicate detections")
                     dedup_start_time = time.time()
+                    
                     df_part, masks_part = remove_duplicates(
                         pd.DataFrame(trees),
                         all_masks,  # Pass masks separately
@@ -241,7 +228,56 @@ async def process_panoramas(config: Config, depth_model, tree_model, calibrate_m
                         config.HEIGHT, config.WIDTH, config.FOV
                     )
                     dedup_time = time.time() - dedup_start_time
-                    logger.debug(f"✅ Deduplication completed in {dedup_time:.2f}s - {len(df_part)} trees remaining")
+                    logger.info(f"✅ Deduplication completed in {dedup_time:.3f}s - {len(df_part)} trees remaining")
+
+                    # Serialize only the kept masks for JSON storage
+                    if masks_part:
+                        logger.info(f"💾 Serializing {len(masks_part)} kept masks for JSON storage")
+                        serialization_start = time.time()
+                        
+                        # Group masks by view using the actual view number from image_path
+                        view_masks = {}
+                        for idx, mask in enumerate(masks_part):
+                            if mask is not None and idx < len(df_part):
+                                row = df_part.iloc[idx]
+                                image_path = row.get('image_path', '')
+                                
+                                # Extract view number from image_path (e.g., "view3" -> 3)
+                                view_num = None
+                                if 'view' in image_path:
+                                    try:
+                                        # Find "view" followed by digits
+                                        match = re.search(r'view(\d+)', image_path)
+                                        if match:
+                                            view_num = int(match.group(1))
+                                    except:
+                                        pass
+                                
+                                if view_num is not None:
+                                    view_name = f"view_{view_num}"
+                                    
+                                    if view_name not in view_masks:
+                                        view_masks[view_name] = []
+                                    
+                                    # Serialize the mask
+                                    serialized_mask = serialize_ultralytics_mask(mask)
+                                    view_masks[view_name].append({
+                                        "tree_index": f"{idx}-0",  # Simplified index
+                                        "image_path": image_path,
+                                        "confidence": float(row.get('conf', 0.0)),
+                                        "mask_data": serialized_mask
+                                    })
+                                else:
+                                    logger.warning(f"⚠️ Could not extract view number from path: {image_path}")
+                        
+                        if view_masks:
+                            mask_json_path = save_panorama_masks(pano.id, view_masks, config)
+                            serialization_time = time.time() - serialization_start
+                            logger.info(f"✅ Masks serialized and saved in {serialization_time:.3f}s to {mask_json_path}")
+                        else:
+                            mask_json_path = None
+                    else:
+                        mask_json_path = None
 
                     # Save full panorama with masks
                     def _save_full(img=image.copy(), td=df_part.copy(), pid=pano.id, mask_path=mask_json_path):
@@ -250,10 +286,15 @@ async def process_panoramas(config: Config, depth_model, tree_model, calibrate_m
                         full_path = os.path.join(config.FULL_DIR, f"{pid}.jpg")
                         cv2.imwrite(full_path, full)
                         logger.debug(f"✅ Full panorama saved: {full_path}")
+                        
+                        if not config.SAVE_MASK_JSON:
+                            os.remove(mask_json_path)
 
                     IO_EXECUTOR.submit(_save_full)
 
                     # Append deduplicated detections directly to the output CSV
+                    logger.info("💾 Saving results to CSV")
+                    save_start = time.time()
                     output_exists = os.path.exists(config.OUTPUT_CSV)
                     df_part.to_csv(
                         config.OUTPUT_CSV,
@@ -262,11 +303,13 @@ async def process_panoramas(config: Config, depth_model, tree_model, calibrate_m
                         header=not output_exists,
                         lineterminator="\n",
                     )
+                    save_time = time.time() - save_start
+                    logger.info(f"✅ Results saved to CSV in {save_time:.3f}s")
 
                     processed_count += 1
                     
                     pano_time = time.time() - pano_start_time
-                    logger.info(f"✅ Panorama {pano.id} processed in {pano_time:.2f}s")
+                    logger.info(f"✅ Panorama {pano.id} processed in {pano_time:.3f}s")
                     
                 except Exception as e:
                     error_count += 1
@@ -288,8 +331,6 @@ async def process_panoramas(config: Config, depth_model, tree_model, calibrate_m
         IO_EXECUTOR.shutdown(wait=True)
 
         # Results have already been written incrementally; nothing to aggregate here.
-        save_start_time = time.time()
-        save_time = time.time() - save_start_time
         total_time = time.time() - pipeline_start_time
         
         # Final statistics
@@ -299,9 +340,8 @@ async def process_panoramas(config: Config, depth_model, tree_model, calibrate_m
         logger.info(f"Successfully processed: {processed_count}")
         logger.info(f"Skipped: {skipped_count}")
         logger.info(f"Errors: {error_count}")
-        logger.info(f"Save time: {save_time:.2f}s")
-        logger.info(f"Total pipeline time: {total_time:.2f}s")
-        logger.info(f"Average time per panorama: {total_time/len(pano_ids):.2f}s")
+        logger.info(f"Total pipeline time: {total_time:.3f}s")
+        logger.info(f"Average time per panorama: {total_time/len(pano_ids):.3f}s")
         logger.info("=" * 60)
         logger.info("✅ Pipeline finished successfully!")
         

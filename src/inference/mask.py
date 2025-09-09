@@ -60,7 +60,7 @@ def verify_mask(image: ImageLike, model) -> Tuple[bool, float]:
         else:
             raise TypeError(f"Unsupported image type: {type(image)}")
 
-        logger.info(f"🖼️  Starting usability inference | size={pil.size} | variant={getattr(model, 'variant', '?')} | backbone={getattr(model, 'backbone', '?')}")
+        logger.debug(f"🖼️  Starting usability inference | size={pil.size} | variant={getattr(model, 'variant', '?')} | backbone={getattr(model, 'backbone', '?')}")
 
         # Build transforms consistent with training
         from torchvision import transforms as T
