@@ -1,118 +1,163 @@
 # TreeInventorization
 
+A comprehensive street-level tree detection and inventory system that processes Google Street View panoramas to identify, segment, and geolocate trees in urban environments.
 
-## Run 
+## Overview
 
-1. Add the following env variables to a .env
-```env
-# Postgres DB
-DB_URL="**********"
+This project provides an end-to-end pipeline for automated tree detection from street-level imagery. It combines computer vision models for tree segmentation, depth estimation, and quality assessment to create accurate tree inventories with precise geolocation data.
 
-# Google Gemini
-GEMINI_API_KEY="**********"
+## Features
 
-# AWS S3 Bucket
-CLOUD_STORAGE_BUCKET="**********"
-CLOUD_URL="**********"
+- **Tree Detection**: YOLO-based tree segmentation from street view panoramas
+- **Depth Estimation**: DepthAnything V2 model for accurate depth mapping
+- **Quality Assessment**: Mask quality verification to filter false positives
+- **Geolocation**: Precise tree positioning using depth maps and camera parameters
+- **Batch Processing**: Asynchronous processing of multiple panoramas
+- **Evaluation Tools**: Comprehensive evaluation against ground truth data
+- **Visualization**: Interactive maps showing detected trees
+
+## Project Structure
+
+```
+TreeInventorization/
+├── main.py                 # Main pipeline entry point
+├── config.py              # Configuration management
+├── cli.py                 # Command-line interface
+├── src/                   # Source code
+│   ├── inference/         # Model inference modules
+│   │   ├── depth.py       # Depth estimation
+│   │   ├── mask.py        # Mask quality verification
+│   │   └── segment.py     # Tree segmentation
+│   ├── pipeline/          # Main processing pipeline
+│   │   └── pano_async.py  # Asynchronous panorama processing
+│   ├── utils/             # Utility functions
+│   │   ├── depth_calibration.py
+│   │   ├── geodesic.py
+│   │   ├── masks.py
+│   │   ├── transformation.py
+│   │   └── unwrap.py
+│   └── notebooks/         # Testing notebooks (not used in pipeline)
+├── models/                # Model weights (gitignored - must be downloaded)
+│   ├── TreeModelV3/       # Trunk segmentation model
+│   ├── TreeModel/         # Tree segmentation model
+│   ├── DepthAnything/     # Depth estimation model
+│   ├── CalibrateDepth/    # Depth calibration model
+│   └── MaskQuality/       # Mask quality assessment model
+├── data/                  # Data storage
+│   ├── full/              # Full panorama images
+│   ├── views/             # Perspective views
+│   ├── depth_maps/        # Generated depth maps
+│   ├── masks/             # Generated masks
+│   └── logs/              # Processing logs
+├── streetviews/           # Panorama metadata
+│   └── *.csv              # Panorama ID lists
+├── eval/                  # Evaluation tools
+│   ├── eval.py            # Model evaluation script
+│   └── 28_29_groundtruth.csv  # Ground truth data
+├── annotations/           # Training annotations (ignored)
+└── old/                   # Legacy code (ignored)
 ```
 
-2. Add the chandigarh_panoramas.csv file to ./data/input/chandigarh_panoramas.csv
+## Setup
 
-3. Run the following commands
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/Utk984/TreeInventorization
+   cd TreeInventorization
+   ```
+
+2. **Download model weights:**
+   The `models/` directory is gitignored and must be populated with pre-trained model weights:
+   - TreeModelV3 weights
+   - DepthAnything V2 checkpoints
+   - CalibrateDepth model weights
+   - MaskQuality model weights
+
+   Place the model files in their respective directories as specified in `config.py`.
+
+## Usage
+
+### Basic Usage
+
+Run the main pipeline with default settings:
+
 ```bash
-# After placing ./data/input/chandigarh_panoramas.csv
-
-# activate virtual enviromnent, then
-pip install -r requirements.txt
-
-# run
-python3 src/main.py
+python3 main.py --input_csv path/to/panorama_ids.csv
 ```
 
-## Pipeline
+### Command Line Options
 
-1. extract all panoramas (street view images) within a given city's limits.
-2. divide the panoramas (unwrap them) into 90deg views.
-3. run a instance segmentation model to detect trees
-4. save the images into a image file dump on the cloud.
-5. extract a point on the image around the bottom of each tree
-6. project this image back to the original image and then using the depth map, estimate the latlong of the tree
-7. send the tree image to gemini api, and get the estimate of tree species, common_name and short description.
-8. store all the below data into the database (postgres)
+```bash
+python3 main.py --input_csv path/to/panorama_ids.csv --output_csv path/to/output.csv --fov 90 --width 1024 --height 720
+```
 
+**Parameters:**
+- `--input_csv, -i`: Path to panorama ID CSV (default: from config.py)
+- `--output_csv, -o`: Output CSV path (default: from config.py)
+- `--fov`: Horizontal field of view in degrees (default: 90)
+- `--width`: Perspective view width in pixels (default: 1024)
+- `--height`: Perspective view height in pixels (default: 720)
 
-## Malhar's NOTES
+### Evaluation
 
-1. follow chatgpt folder structure.
-2. start with a connection to db, load_dotenv(), etc... dont repeat this too many times.
-3. Do it batchwise, follow gpt code's guide (as in pipeline.py) (tqdm)
-    - get 32 pano images, store in a list of pano objects.
-    - for each pano - get 3 fovs
-    - for each fov, get all trees
-    - for each tree
-        1. (??) check if tree already exists at latlong +- radius=5m?
-        2. get its image, process it, send to s3 bucket
-        3. send its image to gemini, get its prediction (figure out prompt caching)
-        4. save all its info to DB (sqlalchemy + postgis hopefully)
-            - common name
-            - species name
-            - short desc
-            - link path
-            - latlong
-            - stview image id
-            - orientation of capture (theta)
-            - height(?)
-            - diameter (?)
-            - lat_offset=0,
-            - lng_offset=0,
-            - image_x=image_x,
-            - image_y=image_y,
+Evaluate model predictions against ground truth:
 
+```bash
+python3 eval/eval.py path/to/predictions.csv --plot True
+```
 
-## file structure
+**Parameters:**
+- `predictions_csv_path`: Path to predictions CSV file
+- `--plot`: Generate visualization map (True/False)
 
-urban-tree-inventory/
-├── data/                                # Folder for all raw and processed data
-│   ├── input/                           # Input files like panoramas, CSVs
-│   │   └── chandigarh_panoramas.csv     # All panoramas in chandigarh preprocessed
-│   ├── images/                          # images stored while processing or testing
-│   │   └── panoramas/                   # whole panorama images
-│   │   └── perspectives/                # FOV (-90/0/90) degree images
-│   │   └── predict/                     # Tree predictions (cropped or with bounding box)
-│   ├── logs/                            # Log files
-│   └── temp/                            # Temporary files during processing
-├── src/                                 # Source code
-│   ├── __init__.py                      # Makes src a Python package
-│   ├── main.py                          # Main entry point for running the pipeline
-│   ├── config.py                        # Configuration and constants
-│   ├── data_pipeline/
-│   │   ├── __init__.py                  # Makes data_pipeline a package
-│   │   ├── unwrapping.py                # Functions to unwrap panoramas
-│   │   ├── segmentation.py              # Instance segmentation model prediction logic
-│   │   ├── cloud_storage.py             # Logic for saving images to the cloud
-│   │   ├── tree_extraction.py           # Extract tree latlon from images
-│   │   ├── species_detection.py         # Interaction with Gemini API
-│   │   └── database.py                  # Database insertion logic
-│   ├── utils/                           # Utility functions
-│   │   ├── __init__.py                  # Makes utils a package
-│   │   ├── image_utils.py               # Image utilities
-│   │   └── batch_processing.py          # Functions to handle batch processing
-│   └── visualization/
-│       ├── __init__.py                  # Makes visualization a package
-│       ├── map_viewer.py                # Streamlit or Folium map viewer (not implemented)
-│       └── dashboard.py                 # Streamlit dashboard code (not implemented)
-├── tests/                               # various random unit tests, to check functions
-├── requirements.txt                     # List of Python dependencies
-├── README.md                            # Documentation for the project
-└── .gitignore                           # Files and directories to ignore in Git
+## Configuration
 
+The system is configured through `config.py`. Key settings include:
 
-## Todo
+- **Model paths**: Locations of pre-trained model weights
+- **Data directories**: Input/output folder paths
+- **Processing parameters**: Image dimensions, batch size, FOV
+- **Device settings**: CUDA/CPU selection
+- **Logging**: Log file configuration
 
-1. Type casting for all functions
-2. All functions need to have proper documentation strings
-3. Add logging instead of print statements
-4. Add visualisation into this repo itself
-5. Better Database connection - Maybe use ORM such as sqlalchemy?
-6. Long term - Improve efficiency by taking advantages of batch processing, parallel computing, etc.
-7. Integrate Panorama extraction into this so that we dont have to extract panoramas before.
+## Data Format
+
+### Input CSV Format
+Panorama ID CSV should contain:
+- `pano_id`: Google Street View panorama identifier
+
+### Output CSV Format
+Generated tree data CSV contains:
+- `pano_id`: Source panorama identifier
+- `tree_lat`, `tree_lng`: Tree coordinates
+- `conf`: Detection confidence score
+- `image_path`: Path to source image
+- Additional metadata fields
+
+## Pipeline Workflow
+
+1. **Panorama Fetching**: Download street view panoramas and depth maps
+2. **Perspective Generation**: Create multiple perspective views from panoramas
+3. **Tree Detection**: Apply YOLO model for tree segmentation
+4. **Depth Estimation**: Generate depth maps using DepthAnything V2
+5. **Quality Assessment**: Filter detections using mask quality model
+6. **Geolocation**: Calculate precise tree coordinates using depth and camera parameters
+7. **Output Generation**: Save results to CSV format
+
+## Models
+
+- **TreeModelV3**: YOLO-based trunk segmentation model
+- **TreeModel**: YOLO-based tree segmentation model
+- **DepthAnything V2**: Vision Transformer for depth estimation
+- **CalibrateDepth**: Random Forest model for depth calibration
+- **MaskQuality**: Quality assessment for segmentation masks
+
+## Evaluation Metrics
+
+The evaluation system provides:
+- **Precision**: True positives / (True positives + False positives)
+- **Recall**: True positives / (True positives + False negatives)
+- **F1 Score**: Harmonic mean of precision and recall
+- **Matches %**: Percentage of correct panorama matches
+- **Distance thresholds**: Configurable matching distances (3m, 5m)
+- **Duplicate removal**: Configurable duplicate detection (2m, 5m)
