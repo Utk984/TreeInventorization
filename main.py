@@ -4,6 +4,7 @@ from cli import parse_args, build_config
 from src.pipeline.pano_async import process_panoramas
 from models.DepthAnything.depth_anything_v2.dpt import DepthAnythingV2
 from models.CalibrateDepth.model import DepthCalibrator
+from models.MaskQuality.load import load_for_inference
 from config import Config
 import torch
 from ultralytics import YOLO
@@ -18,7 +19,7 @@ def load_models(config: Config):
     try:
         # Load depth model
         logger.info(f"Loading depth model from: {config.DEPTH_MODEL_PATH}")
-        depth_model = DepthAnythingV2(**{**config.MODEL_CONFIGS["vitl"], "max_depth": 80})
+        depth_model = DepthAnythingV2(**{**config.DEPTH_MODEL_CONFIGS["vitl"], "max_depth": 80})
         depth_model.load_state_dict(torch.load(config.DEPTH_MODEL_PATH, map_location="cpu"))
         depth_model.to(config.DEVICE).eval()
         logger.info("✅ Depth model loaded successfully")
@@ -31,8 +32,13 @@ def load_models(config: Config):
         logger.info(f"Loading depth calibration model from: {config.DEPTH_CALIBRATION_MODEL_PATH}")
         depth_calibrator = DepthCalibrator(config.DEPTH_CALIBRATION_MODEL_PATH)
         logger.info("✅ Depth calibration model loaded successfully")
+
+        # Load mask model
+        logger.info(f"Loading mask model from: {config.MASK_MODEL_PATH}")
+        mask_model = load_for_inference(config.MASK_MODEL_PATH)
+        logger.info("✅ Mask model loaded successfully")
         
-        return depth_model, tree_model, depth_calibrator
+        return depth_model, tree_model, depth_calibrator, mask_model
         
     except Exception as e:
         logger.error(f"❌ Failed to load models: {str(e)}")
@@ -60,11 +66,11 @@ def main():
         logger.info(f"Full directory: {config.FULL_DIR}")
         
         # Load models
-        depth_model, tree_model, depth_calibrator = load_models(config)
+        depth_model, tree_model, depth_calibrator, mask_model = load_models(config)
         
         # Run pipeline
         logger.info("🔄 Starting panorama processing pipeline")
-        asyncio.run(process_panoramas(config, depth_model, tree_model, depth_calibrator))
+        asyncio.run(process_panoramas(config, depth_model, tree_model, depth_calibrator, mask_model))
         
         total_time = time.time() - pipeline_start_time
         logger.info("=" * 60)

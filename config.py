@@ -17,13 +17,15 @@ class Config:
         self.FULL_DIR = os.path.join(self.DATA_DIR, "full")
         self.LOG_DIR = os.path.join(self.DATA_DIR, "logs")
         self.DEPTH_DIR = os.path.join(self.DATA_DIR, "depth_maps")
+        self.MASK_DIR = os.path.join(self.DATA_DIR, "masks")
 
         # Ensure output folders exist
         os.makedirs(self.VIEW_DIR, exist_ok=True)
         os.makedirs(self.FULL_DIR, exist_ok=True)
         os.makedirs(self.LOG_DIR, exist_ok=True)
         os.makedirs(self.DEPTH_DIR, exist_ok=True)
-
+        os.makedirs(self.MASK_DIR, exist_ok=True)
+        
         # Configure logging - every level INFO and DEBUG are logged
         logging.basicConfig(
             level=logging.INFO,  # DEBUG level captures DEBUG, INFO, WARNING, ERROR, CRITICAL
@@ -53,9 +55,13 @@ class Config:
             self.ROOT_DIR, "models", "CalibrateDepth", "weights", "random_forest.pkl"
         )
 
+        self.MASK_MODEL_PATH = os.path.join(
+            self.ROOT_DIR, "models", "MaskQuality", "weights", "best_overall.pt"
+        )
+
         self.DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.MODEL_CONFIGS = {
+        self.DEPTH_MODEL_CONFIGS = {
             "vits": {"encoder": "vits", "features": 64, "out_channels": [48, 96, 192, 384]},
             "vitb": {"encoder": "vitb", "features": 128, "out_channels": [96, 192, 384, 768]},
             "vitl": {"encoder": "vitl", "features": 256, "out_channels": [256, 512, 1024, 1024]},
