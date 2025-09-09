@@ -25,21 +25,6 @@ def _project_inplace(df, lat0, lon0, mlat, mlon):
     df["y"] = (df["tree_lat"] - lat0) * mlat
 
 
-# Function to check if the ground truth and prediction coordinates are a match
-def get_match(gt_coord, pred_coord, df_groundtruth, df_predictions):
-    gt_pano_id = df_groundtruth[
-        (df_groundtruth["tree_lat"] == gt_coord[0])
-        & (df_groundtruth["tree_lng"] == gt_coord[1])
-    ]["pano_id"].values[0]
-
-    pred_pano_id = df_predictions[
-        (df_predictions["tree_lat"] == pred_coord[0])
-        & (df_predictions["tree_lng"] == pred_coord[1])
-    ]["pano_id"].values[0]
-
-    return gt_pano_id == pred_pano_id
-
-
 # Function to remove duplicates within threshold distance (meters) using grid hashing
 def remove_duplicates(df, threshold=1):
     if len(df) == 0:
@@ -120,16 +105,10 @@ def plot_map(df_groundtruth, df_predictions, tp_matches, zoom_start=15):
             (gt_coord[1] + pred_coord[1]) / 2,
         ]
 
-        color = (
-            "blue"
-            if get_match(gt_coord, pred_coord, df_groundtruth, df_predictions)
-            else "purple"
-        )
-
         folium.Circle(
             location=midpoint,
             radius=radius,
-            color=color,
+            color="blue",
             fill=True,
             fill_opacity=0.2,
         ).add_to(fmap)
@@ -216,14 +195,9 @@ def evaluate(df_groundtruth, df_predictions, threshold, plot):
         precision = round(tp_count / (tp_count + fp_count), 2) if (tp_count + fp_count) > 0 else 0.0
         recall = round(tp_count / (tp_count + fn_count), 2) if (tp_count + fn_count) > 0 else 0.0
         f1_score = round(2 * tp_count / (2 * tp_count + fp_count + fn_count), 2) if (2 * tp_count + fp_count + fn_count) > 0 else 0.0
-        match_count = 0
-        for gt_coord, pred_coord in tp_matches:
-            if get_match(gt_coord, pred_coord, df_groundtruth, df_predictions):
-                match_count += 1
-        matches_percentage = round(match_count / len(tp_matches) * 100, 2) if len(tp_matches) > 0 else 0.0
         if plot:
             plot_map(df_groundtruth, df_predictions, tp_matches)
-        return precision, recall, f1_score, matches_percentage
+        return precision, recall, f1_score
 
     # Grid-based nearest unmatched match within threshold
     from math import floor
@@ -270,21 +244,10 @@ def evaluate(df_groundtruth, df_predictions, threshold, plot):
     recall = round(tp_count / (tp_count + fn_count), 2) if (tp_count + fn_count) > 0 else 0.0
     f1_score = round(2 * tp_count / (2 * tp_count + fp_count + fn_count), 2) if (2 * tp_count + fp_count + fn_count) > 0 else 0.0
 
-    # Compute matches % without DataFrame scans
-    gt_map = { (row[0], row[1]): pano for row, pano in zip(df_groundtruth[["tree_lat", "tree_lng"]].to_numpy(), df_groundtruth["pano_id"].to_numpy()) }
-    pr_map = { (row[0], row[1]): pano for row, pano in zip(df_predictions[["tree_lat", "tree_lng"]].to_numpy(), df_predictions["pano_id"].to_numpy()) }
-    match_count = 0
-    for gt_coord, pred_coord in tp_matches:
-        pano_gt = gt_map.get((gt_coord[0], gt_coord[1]))
-        pano_pr = pr_map.get((pred_coord[0], pred_coord[1]))
-        if pano_gt is not None and pano_pr is not None and pano_gt == pano_pr:
-            match_count += 1
-    matches_percentage = round(match_count / len(tp_matches) * 100, 2) if len(tp_matches) > 0 else 0.0
-
     if plot:
         plot_map(df_groundtruth, df_predictions, tp_matches)
 
-    return precision, recall, f1_score, matches_percentage
+    return precision, recall, f1_score
 
 
 def get_results(df_groundtruth, df_predictions, args):
@@ -309,7 +272,6 @@ def get_results(df_groundtruth, df_predictions, args):
             "Precision",
             "Recall",
             "F1 Score",
-            "Matches %",
         ]
     )
 
@@ -325,7 +287,7 @@ def get_results(df_groundtruth, df_predictions, args):
                 df_prediction = df_predictions[df_predictions["conf"] >= conf_threshold]
                 df_prediction.reset_index(drop=True, inplace=True)
                 df_prediction = remove_duplicates(df_prediction, duplicate_threshold)
-                precision, recall, f1_score, matches = evaluate(
+                precision, recall, f1_score = evaluate(
                     df_groundtruth, df_prediction, dist_threshold, args.plot
                 )
                 if f1_score > max_f1_score[0]:
@@ -339,7 +301,6 @@ def get_results(df_groundtruth, df_predictions, args):
                         precision,
                         recall,
                         f1_score,
-                        matches,
                     ]
                 if precision > max_precision[0]:
                     max_precision[0] = precision
@@ -352,7 +313,6 @@ def get_results(df_groundtruth, df_predictions, args):
                         precision,
                         recall,
                         f1_score,
-                        matches,
                     ]
                 if recall > max_recall[0]:
                     max_recall[0] = recall
@@ -365,7 +325,6 @@ def get_results(df_groundtruth, df_predictions, args):
                         precision,
                         recall,
                         f1_score,
-                        matches,
                     ]
 
         table.add_row(max_precision[1])

@@ -158,7 +158,6 @@ The evaluation system provides:
 - **Precision**: True positives / (True positives + False positives)
 - **Recall**: True positives / (True positives + False negatives)
 - **F1 Score**: Harmonic mean of precision and recall
-- **Matches %**: Percentage of correct panorama matches
 - **Distance thresholds**: Configurable matching distances (3m, 5m)
 - **Duplicate removal**: Configurable duplicate detection (2m, 5m)
 
