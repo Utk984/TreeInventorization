@@ -296,7 +296,7 @@ def get_results(df_groundtruth, df_predictions, args):
     max_f1_score = [0, []]
 
     # Define Evaluation Thresholds
-    conf_thresholds = [0.2, 0.5, 0.7]
+    conf_thresholds = [0.001]
     distance_thresholds = [3, 5]
     duplicate_thresholds = [2, 5]
     table = PrettyTable(
