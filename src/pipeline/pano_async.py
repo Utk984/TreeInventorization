@@ -15,7 +15,7 @@ from src.inference.depth import estimate_depth
 from src.utils.unwrap import divide_panorama
 from src.utils.masks import add_masks, remove_duplicates, make_image, serialize_ultralytics_mask, save_panorama_masks
 from src.utils.transformation import get_point
-from src.utils.geodesic import localize_pixel_with_depth, get_depth_at_pixel
+from src.utils.geodesic import get_depth_at_pixel, make_local_frame, localize_ground_pixel, localize_pixel_with_depth
 from concurrent.futures import ThreadPoolExecutor
 
 # Configure logger for pipeline
@@ -80,21 +80,25 @@ def process_view(config: Config, view, tree_data, pano, image, depth, theta, i, 
 
                     try:
                         orig_point, pers_point = get_point(mask, theta, pano, config.HEIGHT, config.WIDTH, config.FOV)
-                        # Get distance from depth map
                         W, H = image.shape[1], image.shape[0]
+                        u, v = orig_point[0], orig_point[1]
                         
-                        distance_pano = get_depth_at_pixel(pano.depth, orig_point[0], orig_point[1], W, H, flipped=True)
-                        if distance_pano is None:
-                            logger.warning(f"⚠️ No depth map for {pano.id} at {orig_point[0]}, {orig_point[1]}")
+                        distance_pano = get_depth_at_pixel(pano.depth, u, v, W, H, flipped=True)
+                        if distance_pano is None or distance_pano > 15:
+                            logger.warning(f"⚠️ No depth map for {pano.id} at {u}, {v}")
                             continue
-                        if distance_pano > 15:
-                            logger.warning(f"⚠️ Distance too far for {pano.id} at {orig_point[0]}, {orig_point[1]}")
-                            continue
-                        lat_pano, lon_pano = localize_pixel_with_depth(pano, orig_point[0], orig_point[1], W, H, distance_pano)
+                        lf = make_local_frame(pano.lat, pano.lon, getattr(pano, "elevation", 0.0) or 0.0)
+                        lat_pano, lon_pano = localize_ground_pixel(
+                            pano, u, v, W, H,
+                            lf,
+                            depth_map=pano.depth,     
+                            flipped=True,            
+                            default_camera_height=2.6 
+                        )
 
-                        distance_model = depth[orig_point[1]][orig_point[0]]
-                        distance_calibrated = calibrate_model.calibrate_single(distance_model, orig_point[0], orig_point[1])
-                        lat_model, lon_model = localize_pixel_with_depth(pano, orig_point[0], orig_point[1], image.shape[1], image.shape[0], distance_calibrated)
+                        distance_model = depth[v][u]
+                        distance_calibrated = calibrate_model.calibrate_single(distance_model, u, v)
+                        lat_model, lon_model = localize_pixel_with_depth(pano, u, v, image.shape[1], image.shape[0], distance_calibrated)
                         
                         logger.info(f"Model distance: {distance_calibrated:.2f}m, Pano distance: {distance_pano:.2f}m")
                         

@@ -180,8 +180,8 @@ def get_results(df_groundtruth, df_predictions, args):
 
     # Define Evaluation Thresholds
     conf_thresholds = [0.001]
-    distance_thresholds = [3, 5]
-    duplicate_thresholds = [2, 5]
+    distance_thresholds = [3, 5, 8]
+    duplicate_thresholds = [3]
     table = PrettyTable(
         [
             "Metric",
@@ -265,16 +265,15 @@ def create_parser():
     )
     parser.add_argument(
         "predictions_csv_path",
-        type=str,
         help="Path to the CSV file containing predictions.",
-        default="/home/utkarsh/TreeInventorization/outputs/chandigarh_trees.csv",
     )
     return parser
 
 
 parser = create_parser()
 args = parser.parse_args()
-df_groundtruth = pd.read_csv("/home/utkarsh/TreeInventorization/eval/chandigarh_groundtruth.csv")
+df_groundtruth = pd.read_csv("./eval/chandigarh_groundtruth.csv")
 df_predictions = pd.read_csv(args.predictions_csv_path)
+df_predictions = df_predictions[df_predictions['distance_pano'] < 10]
 
 get_results(df_groundtruth, df_predictions, args)
