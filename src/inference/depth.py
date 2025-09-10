@@ -7,13 +7,9 @@ logger = logging.getLogger(__name__)
 def estimate_depth(image, model):
     """Estimate depth from image with logging."""
     logger.info(f"🔍 Starting depth estimation for image shape: {image.shape}")
-    start_time = time.time()
     
     try:
         depth = model.infer_image(image)
-        
-        inference_time = time.time() - start_time
-        logger.info(f"✅ Depth estimation completed in {inference_time:.3f}s")
         logger.info(f"📊 Depth map shape: {depth.shape}, min: {depth.min():.2f}, max: {depth.max():.2f}")
         
         return depth

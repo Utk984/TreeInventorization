@@ -20,13 +20,10 @@ def detect_trunks(view, model, device, model_version="V3"):
         ultralytics Results object with trunk-only detections
     """
     logger.debug(f"🌳 Starting trunk detection for {model_version} - view shape: {view.shape}")
-    start_time = time.time()
     
     try:
         # Run inference with same parameters as original segment.py
         results = model.predict(view, verbose=False, imgsz=(1024,1024), device=device, conf=0.01)
-        
-        inference_time = time.time() - start_time
         
         # Filter for trunk-only detections (class 1)
         if results and len(results) > 0:
@@ -41,19 +38,15 @@ def detect_trunks(view, model, device, model_version="V3"):
                         result.masks = result.masks[trunk_indices]
                     
                     trunk_count = np.sum(trunk_indices)
-                    logger.debug(f"✅ Trunk detection ({model_version}) completed in {inference_time:.3f}s")
                     logger.debug(f"📊 Found {trunk_count} trunk detections (filtered from {len(trunk_indices)} total)")
                 else:
-                    logger.debug(f"✅ Trunk detection ({model_version}) completed in {inference_time:.3f}s")
                     logger.debug(f"📊 No trunk detections found")
                     # Return empty results
                     results = []
             else:
-                logger.debug(f"✅ Trunk detection ({model_version}) completed in {inference_time:.3f}s")
                 logger.debug(f"📊 No bounding boxes found")
                 results = []
         else:
-            logger.debug(f"✅ Trunk detection ({model_version}) completed in {inference_time:.3f}s")
             logger.debug(f"📊 No results returned")
             results = []
         
@@ -67,12 +60,9 @@ def detect_trunks(view, model, device, model_version="V3"):
 def detect_trees(view, model, device):
     """Detect trees in view with logging."""
     logger.debug(f"🌳 Starting tree detection for view shape: {view.shape}")
-    start_time = time.time()
     
     try:
         results = model.predict(view, verbose=False, imgsz=(1024,1024), device=device)
-        
-        inference_time = time.time() - start_time
         
         # Log detection statistics
         total_detections = 0
@@ -80,7 +70,6 @@ def detect_trees(view, model, device):
             if result.masks is not None:
                 total_detections += len(result.masks)
         
-        logger.debug(f"✅ Tree detection completed in {inference_time:.3f}s")
         logger.debug(f"📊 Found {total_detections} tree detections")
         
         return results

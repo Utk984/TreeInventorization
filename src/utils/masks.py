@@ -230,7 +230,6 @@ def deserialize_ultralytics_mask(mask_data: Dict[str, Any]):
         logger.error(f"❌ Error deserializing mask: {str(e)}")
         raise
 
-
 def make_image(view, box, mask, image_path):
     """
     Create and save a tree image with bounding box, confidence, and mask overlay.

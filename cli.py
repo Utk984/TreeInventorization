@@ -6,9 +6,9 @@ def parse_args() -> argparse.Namespace:
         description="Street Level Tree Detection Pipeline"
     )
 
-    parser.add_argument("--input_csv", "-i", default=None,
+    parser.add_argument("--input_csv", "-i", default="./streetviews/chandigarh_streets.csv",
                         help="Path to panorama ID CSV (default: check config.py)")
-    parser.add_argument("--output_csv", "-o", default=None,
+    parser.add_argument("--output_csv", "-o", default="./outputs/chandigarh_trees.csv",
                         help="Where to save tree data CSV (default: check config.py)")
     parser.add_argument("--fov", type=int, default=90,
                         help="Horizontal field of view in degrees (default: 90)")

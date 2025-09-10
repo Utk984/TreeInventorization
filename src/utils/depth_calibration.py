@@ -1,23 +1,3 @@
-#!/usr/bin/env python3
-"""
-Depth Calibration Script - Linear vs Non-Linear Approaches
-
-This script calibrates the predicted depth values using Google depth as ground truth.
-It compares multiple approaches:
-1. Simple Linear: google_depth = slope * pred_depth + intercept
-2. Multiple Linear: google_depth = slope1 * pred_depth + slope2 * image_x + slope3 * image_y + intercept
-3. Polynomial Features: Including quadratic terms and interactions
-4. Random Forest: Tree-based non-linear approach
-5. SVR with RBF kernel: Support Vector Regression with non-linear kernel
-
-Steps:
-1. Load the depth comparison data
-2. Filter out invalid Google depth values (-1.0)
-3. Train and evaluate all models
-4. Compare performance and create visualizations
-5. Save the best performing model
-"""
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -59,7 +39,6 @@ def load_and_clean_data(csv_path):
     
     return df_clean
 
-
 def analyze_data_distribution(df):
     """Analyze the distribution of features."""
     logger.info("📊 Analyzing data distribution")
@@ -67,7 +46,6 @@ def analyze_data_distribution(df):
     for col in ['pred_depth', 'google_depth', 'image_x', 'image_y']:
         logger.info(f"📈 {col:12} - Mean: {df[col].mean():8.2f}, Std: {df[col].std():8.2f}, "
                    f"Min: {df[col].min():8.2f}, Max: {df[col].max():8.2f}")
-
 
 def train_simple_linear(df):
     """Train simple linear regression: google_depth = slope * pred_depth + intercept"""
@@ -105,7 +83,6 @@ def train_simple_linear(df):
         'equation': f"google_depth = {model.coef_[0]:.6f} * pred_depth + {model.intercept_:.6f}"
     }
 
-
 def train_multiple_linear(df):
     """Train multiple linear regression with spatial coordinates."""
     X = df[['pred_depth', 'image_x', 'image_y']].values
@@ -135,7 +112,6 @@ def train_multiple_linear(df):
         'cv_r2_std': cv_std,
         'equation': f"google_depth = {model.coef_[0]:.6f} * pred_depth + {model.coef_[1]:.6f} * image_x + {model.coef_[2]:.6f} * image_y + {model.intercept_:.6f}"
     }
-
 
 def train_polynomial(df, degree=2):
     """Train polynomial regression with interaction terms."""
@@ -172,7 +148,6 @@ def train_polynomial(df, degree=2):
         'cv_r2_std': cv_std,
         'equation': f"Polynomial features with degree {degree}"
     }
-
 
 def train_random_forest(df):
     """Train Random Forest regression."""
@@ -215,7 +190,6 @@ def train_random_forest(df):
         'feature_importance': dict(zip(feature_names, feature_importance))
     }
 
-
 def train_svr_rbf(df):
     """Train Support Vector Regression with RBF kernel."""
     X = df[['pred_depth', 'image_x', 'image_y']].values
@@ -250,7 +224,6 @@ def train_svr_rbf(df):
         'cv_r2_std': cv_std,
         'equation': f"Support Vector Regression with RBF kernel"
     }
-
 
 def compare_models(df):
     """Train and compare all models."""
@@ -290,7 +263,6 @@ def compare_models(df):
         logger.info(f"{model['name']:<20} {model['r2']:<8.4f} {model['rmse']:<8.4f} {model['mae']:<8.4f} {model['cv_r2_mean']:.4f}±{model['cv_r2_std']:.4f}")
     
     return models
-
 
 def create_comprehensive_plots(df, models):
     """Create comprehensive visualization plots."""
@@ -415,7 +387,6 @@ def create_comprehensive_plots(df, models):
     
     logger.info(f"📊 Comprehensive comparison plots saved to eval/depth_calibration_comparison.png")
 
-
 def save_best_model(df, models, output_path):
     """Save the best performing model and results."""
     best_model = models[0]
@@ -458,7 +429,6 @@ def save_best_model(df, models, output_path):
     logger.info(f"💾 Best model results saved to: {output_path}")
     logger.info(f"💾 Best model saved to: {model_path}")
     logger.info(f"💾 Detailed results saved to: {results_path}")
-
 
 def main():
     logger.info("🚀 Starting depth calibration pipeline")
@@ -508,7 +478,6 @@ def main():
         logger.info("🔍 Feature Importance:")
         for feature, importance in best_model['feature_importance'].items():
             logger.info(f"  {feature}: {importance:.4f}")
-
 
 if __name__ == "__main__":
     main() 

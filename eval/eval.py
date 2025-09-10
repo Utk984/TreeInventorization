@@ -1,7 +1,5 @@
 import argparse
 
-import folium
-import leafmap.foliumap as leafmap
 import pandas as pd
 from geopy.distance import geodesic
 from prettytable import PrettyTable
@@ -86,80 +84,7 @@ def remove_duplicates(df, threshold=1):
     return df.drop(index=list(to_remove)).reset_index(drop=True)
 
 
-# Function to plot the ground truth and predictions
-def plot_map(df_groundtruth, df_predictions, tp_matches, zoom_start=15):
-    map_center = [
-        df_groundtruth["tree_lat"].mean(),
-        df_groundtruth["tree_lng"].mean(),
-    ]
-
-    # Create a leafmap object (which is Folium-based) and add hybrid tiles
-    fmap = leafmap.Map(center=map_center, zoom=zoom_start, max_zoom=25)
-
-        # Highlight true positives with a circle around both points
-    for gt_coord, pred_coord in tp_matches:
-        radius = geodesic(gt_coord, pred_coord).meters / 2 + 2
-
-        midpoint = [
-            (gt_coord[0] + pred_coord[0]) / 2,
-            (gt_coord[1] + pred_coord[1]) / 2,
-        ]
-
-        folium.Circle(
-            location=midpoint,
-            radius=radius,
-            color="blue",
-            fill=True,
-            fill_opacity=0.2,
-        ).add_to(fmap)
-
-    for _, row in df_predictions.iterrows():
-        image_url = f"http://localhost:8000/{row['image_path'].split('/')[-1]}"  # Adjust if hosted elsewhere
-        popup_html = f"""
-        <div>
-            <p><b>Pano ID:</b> {row["pano_id"]}</p>
-            <img src="{image_url}" width="300">
-        </div>
-        """
-
-        folium.CircleMarker(
-            location=[row["tree_lat"], row["tree_lng"]],
-            popup=folium.Popup(popup_html, max_width=350),
-            radius=0.2,
-            color="blue",
-            fill=True,
-            fill_color="blue",
-            fill_opacity=0.7,
-        ).add_to(fmap)
-
-    # Add ground truth points
-    for _, row in df_groundtruth.iterrows():
-        folium.CircleMarker(
-            location=[row["tree_lat"], row["tree_lng"]],
-            popup=row["pano_id"],
-            radius=0.2,
-            color="green",
-            fill=True,
-            fill_color="green",
-            fill_opacity=0.7,
-        ).add_to(fmap)
-
-
-
-    esri_layer = folium.TileLayer(
-        tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        attr='Esri',
-        name='Esri WorldImagery',
-        overlay=True,
-        control=True,
-        max_zoom=25
-    )
-    esri_layer.add_to(fmap)
-    folium.LayerControl().add_to(fmap)
-    fmap.save("map_with_matches.html")
-
-
-def evaluate(df_groundtruth, df_predictions, threshold, plot):
+def evaluate(df_groundtruth, df_predictions, threshold):
     # Expect projected columns present
     gt_latlng = df_groundtruth[["tree_lat", "tree_lng"]].to_numpy()
     pr_latlng = df_predictions[["tree_lat", "tree_lng"]].to_numpy()
@@ -195,8 +120,6 @@ def evaluate(df_groundtruth, df_predictions, threshold, plot):
         precision = round(tp_count / (tp_count + fp_count), 2) if (tp_count + fp_count) > 0 else 0.0
         recall = round(tp_count / (tp_count + fn_count), 2) if (tp_count + fn_count) > 0 else 0.0
         f1_score = round(2 * tp_count / (2 * tp_count + fp_count + fn_count), 2) if (2 * tp_count + fp_count + fn_count) > 0 else 0.0
-        if plot:
-            plot_map(df_groundtruth, df_predictions, tp_matches)
         return precision, recall, f1_score
 
     # Grid-based nearest unmatched match within threshold
@@ -244,9 +167,6 @@ def evaluate(df_groundtruth, df_predictions, threshold, plot):
     recall = round(tp_count / (tp_count + fn_count), 2) if (tp_count + fn_count) > 0 else 0.0
     f1_score = round(2 * tp_count / (2 * tp_count + fp_count + fn_count), 2) if (2 * tp_count + fp_count + fn_count) > 0 else 0.0
 
-    if plot:
-        plot_map(df_groundtruth, df_predictions, tp_matches)
-
     return precision, recall, f1_score
 
 
@@ -288,7 +208,7 @@ def get_results(df_groundtruth, df_predictions, args):
                 df_prediction.reset_index(drop=True, inplace=True)
                 df_prediction = remove_duplicates(df_prediction, duplicate_threshold)
                 precision, recall, f1_score = evaluate(
-                    df_groundtruth, df_prediction, dist_threshold, args.plot
+                    df_groundtruth, df_prediction, dist_threshold
                 )
                 if f1_score > max_f1_score[0]:
                     max_f1_score[0] = f1_score
@@ -347,19 +267,14 @@ def create_parser():
         "predictions_csv_path",
         type=str,
         help="Path to the CSV file containing predictions.",
-    )
-    parser.add_argument(
-        "--plot",
-        type=lambda x: x.lower() == "true",
-        default=False,
-        help="Create plot (True/False). Default: False",
+        default="/home/utkarsh/TreeInventorization/outputs/chandigarh_trees.csv",
     )
     return parser
 
 
 parser = create_parser()
 args = parser.parse_args()
-df_groundtruth = pd.read_csv("./28_29_groundtruth.csv")
+df_groundtruth = pd.read_csv("/home/utkarsh/TreeInventorization/eval/chandigarh_groundtruth.csv")
 df_predictions = pd.read_csv(args.predictions_csv_path)
 
 get_results(df_groundtruth, df_predictions, args)

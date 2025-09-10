@@ -12,7 +12,6 @@ from config import Config
 from aiohttp import ClientSession
 from src.inference.segment import detect_trunks, detect_trees
 from src.inference.depth import estimate_depth
-from src.inference.mask import verify_mask
 from src.utils.unwrap import divide_panorama
 from src.utils.masks import add_masks, remove_duplicates, make_image, serialize_ultralytics_mask, save_panorama_masks
 from src.utils.transformation import get_point
@@ -103,12 +102,6 @@ def process_view(config: Config, view, tree_data, pano, image, depth, theta, i, 
                         IO_EXECUTOR.submit(
                             make_image, view, boxes[k], mask, image_path
                         )
-
-                        # Verify mask
-                        # usable, prob = verify_mask(image, mask_model)
-                        # if not usable and prob > 0.5:
-                        #     logger.warning(f"⚠️ Mask not usable for {pano.id} at {orig_point[0]}, {orig_point[1]}")
-                        #     continue
                         
                     except Exception as e:
                         logger.error(f"❌ Error processing tree {k} in view {i}: {e}")
@@ -147,10 +140,7 @@ async def process_panoramas(config: Config, depth_model, tree_model, calibrate_m
     try:
         # Load panorama IDs
         logger.info(f"📋 Loading panorama IDs from: {config.PANORAMA_CSV}")
-        load_start_time = time.time()
         pano_ids = pd.read_csv(config.PANORAMA_CSV)["pano_id"].tolist()
-        load_time = time.time() - load_start_time
-        logger.info(f"✅ Loaded {len(pano_ids)} panoramas in {load_time:.3f}s")
 
         processed_count = 0
         skipped_count = 0
@@ -194,7 +184,7 @@ async def process_panoramas(config: Config, depth_model, tree_model, calibrate_m
                     view_start_time = time.time()
                     views = divide_panorama(image, config.HEIGHT, config.WIDTH, config.FOV)
                     view_time = time.time() - view_start_time
-                    logger.info(f"✅ Generated {len(views)} perspective views in {view_time:.3f}s")
+                    logger.info(f"✅ Perspective Generation completed in {view_time:.3f}s")
 
                     # Process each view
                     trees = []
@@ -208,7 +198,7 @@ async def process_panoramas(config: Config, depth_model, tree_model, calibrate_m
                         all_masks.extend(tree_masks)  # Collect masks for deduplication
                     
                     view_processing_time = time.time() - view_processing_start
-                    logger.info(f"✅ View processing completed in {view_processing_time:.3f}s")
+                    logger.info(f"✅ View Processing completed in {view_processing_time:.3f}s")
 
                     if not trees:
                         logger.info(f"🌳 No trunks found in panorama {pano.id}")
@@ -273,7 +263,7 @@ async def process_panoramas(config: Config, depth_model, tree_model, calibrate_m
                         if view_masks:
                             mask_json_path = save_panorama_masks(pano.id, view_masks, config)
                             serialization_time = time.time() - serialization_start
-                            logger.info(f"✅ Masks serialized and saved in {serialization_time:.3f}s to {mask_json_path}")
+                            logger.info(f"✅ Masks Serialization completed in {serialization_time:.3f}s to {mask_json_path}")
                         else:
                             mask_json_path = None
                     else:
@@ -285,7 +275,7 @@ async def process_panoramas(config: Config, depth_model, tree_model, calibrate_m
                         full = add_masks(img, td, config.HEIGHT, config.WIDTH, config.FOV, mask_path)
                         full_path = os.path.join(config.FULL_DIR, f"{pid}.jpg")
                         cv2.imwrite(full_path, full)
-                        logger.debug(f"✅ Full panorama saved: {full_path}")
+                        logger.debug(f"✅ Full Panorama saved: {full_path}")
                         
                         if not config.SAVE_MASK_JSON:
                             os.remove(mask_json_path)
@@ -304,12 +294,12 @@ async def process_panoramas(config: Config, depth_model, tree_model, calibrate_m
                         lineterminator="\n",
                     )
                     save_time = time.time() - save_start
-                    logger.info(f"✅ Results saved to CSV in {save_time:.3f}s")
+                    logger.info(f"✅ Results CSV saved in {save_time:.3f}s")
 
                     processed_count += 1
                     
                     pano_time = time.time() - pano_start_time
-                    logger.info(f"✅ Panorama {pano.id} processed in {pano_time:.3f}s")
+                    logger.info(f"✅ Panorama {pano.id} Processing completed in {pano_time:.3f}s")
                     
                 except Exception as e:
                     error_count += 1

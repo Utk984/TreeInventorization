@@ -82,19 +82,36 @@ def Rx(a):
     c,s = math.cos(a), math.sin(a)
     return np.array([[1,0,0],[0,c,-s],[0,s,c]], float)
 
-def pixel_to_cam_dir(u, v, W, H):
-    theta = 2*math.pi*(u/W - 0.5)        # azimuth offset [-pi,pi]
-    phi   = math.pi*(0.5 - v/H)          # elevation [-pi/2,pi/2]
-    d = np.array([math.cos(phi)*math.sin(theta),
-                  math.sin(phi),
-                  math.cos(phi)*math.cos(theta)], float)
-    return d / np.linalg.norm(d)
-
 def ray_world_dir(u, v, W, H, heading, pitch=0.0, roll=0.0):
-    d_cam = pixel_to_cam_dir(u, v, W, H)
-    R = Rz(heading) @ Rx(pitch) @ Rz(roll)   # yaw(heading) about Up, small pitch/roll
-    d_w = R @ d_cam
-    return d_w / np.linalg.norm(d_w)
+    """
+    heading/pitch/roll are radians.
+    (u=0,v=0) is top-left; u rightwards, v downwards.
+    """
+    # 1) pixel -> world azimuth/elevation (GPano)
+    az = heading + 2*math.pi*(u / W - 0.5)     # clockwise from North
+    el = math.pi * (0.5 - v / H)               # +up
+
+    # 2) base ENU unit vector from az/el
+    d = np.array([
+        math.sin(az) * math.cos(el),   # East
+        math.cos(az) * math.cos(el),   # North
+        math.sin(el)                   # Up
+    ], dtype=float)
+
+    # 3) apply pano pitch & roll about fixed ENU axes (X=East, Y=North)
+    cp, sp = math.cos(pitch), math.sin(pitch)
+    cr, sr = math.cos(roll),  math.sin(roll)
+
+    Rx = np.array([[1, 0, 0],
+                   [0, cp, -sp],
+                   [0, sp,  cp]], float)          # pitch about East (X)
+
+    Ry = np.array([[ cr, 0, sr],
+                   [  0, 1,  0],
+                   [-sr, 0, cr]], float)          # roll about North (Y)
+
+    d = Rx @ (Ry @ d)
+    return d / np.linalg.norm(d)
 
 # --- ENU -> lat/lon using pyproj (install: pip install pyproj) ---
 def enu_to_lla(X_enu, lf: LocalFrame):

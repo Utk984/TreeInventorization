@@ -38,10 +38,10 @@ class Config:
         )
         
         # Panorama CSV input
-        self.PANORAMA_CSV = os.path.join(self.ROOT_DIR, "streetviews/chandigarh_28_29.csv")
+        self.PANORAMA_CSV = os.path.join(self.ROOT_DIR, "streetviews/chandigarh_streets.csv")
 
         # Output CSV
-        self.OUTPUT_CSV = os.path.join(self.OUTPUT_DIR, "tree_data.csv")
+        self.OUTPUT_CSV = os.path.join(self.OUTPUT_DIR, "chandigarh_trees.csv")
 
         # Model config
         self.TREE_MODEL_PATH = os.path.join(
