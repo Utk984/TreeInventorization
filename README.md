@@ -14,13 +14,14 @@ This project provides an end-to-end pipeline for automated tree detection from s
 - **Geolocation**: Precise tree positioning using depth maps and camera parameters
 - **Batch Processing**: Asynchronous processing of multiple panoramas
 - **Evaluation Tools**: Comprehensive evaluation against ground truth data
-- **Visualization**: Interactive maps showing detected trees
+- **Interactive Visualization**: Real-time interactive maps with tree and street view markers
 
 ## Project Structure
 
 ```
 TreeInventorization/
-├── main.py                 # Main pipeline entry point
+├── run.sh                 # Unified script for pipeline, eval, and plot
+├── main.py                # Main pipeline entry point
 ├── config.py              # Configuration management
 ├── cli.py                 # Command-line interface
 ├── src/                   # Source code
@@ -34,6 +35,7 @@ TreeInventorization/
 │   │   ├── depth_calibration.py
 │   │   ├── geodesic.py
 │   │   ├── masks.py
+│   │   ├── plot.py        # Interactive plotting and visualization
 │   │   ├── transformation.py
 │   │   └── unwrap.py
 │   └── notebooks/         # Testing notebooks (not used in pipeline)
@@ -51,9 +53,10 @@ TreeInventorization/
 │   └── logs/              # Processing logs
 ├── streetviews/           # Panorama metadata
 │   └── *.csv              # Panorama ID lists
+├── outputs/               # Generated outputs
+│   └── *.csv              # Tree detection results
 ├── eval/                  # Evaluation tools
-│   ├── eval.py            # Model evaluation script
-│   └── 28_29_groundtruth.csv  # Ground truth data
+│   └── eval.py            # Model evaluation script (plotting removed)
 ├── annotations/           # Training annotations (ignored)
 └── old/                   # Legacy code (ignored)
 ```
@@ -77,38 +80,77 @@ TreeInventorization/
 
 ## Usage
 
-### Basic Usage
+### Quick Start
 
-Run the main pipeline with default settings:
-
-```bash
-python3 main.py --input_csv path/to/panorama_ids.csv
-```
-
-### Command Line Options
+The project now includes a unified script `run.sh` that provides three main operations:
 
 ```bash
-python3 main.py --input_csv path/to/panorama_ids.csv --output_csv path/to/output.csv --fov 90 --width 1024 --height 720
+# Make the script executable (if not already)
+chmod +x run.sh
+
+# Run the tree detection pipeline
+./run.sh --pipeline
+
+# Run evaluation against ground truth
+./run.sh --eval
+
+# Run interactive plotting and visualization
+./run.sh --plot
 ```
 
-**Parameters:**
-- `--input_csv, -i`: Path to panorama ID CSV (default: from config.py)
-- `--output_csv, -o`: Output CSV path (default: from config.py)
+### Detailed Usage
+
+#### 1. Pipeline (Tree Detection)
+
+Run the main pipeline with custom parameters:
+
+```bash
+./run.sh --pipeline --input_csv path/to/panorama_ids.csv --output_csv path/to/output.csv --fov 90 --width 1024 --height 720
+```
+
+**Pipeline Parameters:**
+- `--input_csv, -i`: Path to panorama ID CSV (default: `./streetviews/chandigarh_streets.csv`)
+- `--output_csv, -o`: Output CSV path (default: `./outputs/chandigarh_trees.csv`)
 - `--fov`: Horizontal field of view in degrees (default: 90)
 - `--width`: Perspective view width in pixels (default: 1024)
 - `--height`: Perspective view height in pixels (default: 720)
+- `--save_depth_maps`: Save depth maps (default: False)
+- `--save_mask_json`: Save mask JSON (default: False)
 
-### Evaluation
+#### 2. Evaluation
 
 Evaluate model predictions against ground truth:
 
 ```bash
-python3 eval/eval.py path/to/predictions.csv --plot True
+./run.sh --eval path/to/predictions.csv
 ```
 
-**Parameters:**
-- `predictions_csv_path`: Path to predictions CSV file
-- `--plot`: Generate visualization map (True/False)
+**Evaluation Parameters:**
+- `predictions_csv_path`: Path to predictions CSV file (default: `./outputs/chandigarh_trees.csv`)
+
+#### 3. Interactive Plotting
+
+Generate interactive maps with tree and street view visualization:
+
+```bash
+./run.sh --plot --tree-csv ./outputs/tree_data.csv --streetview-csv ./streetviews/chandigarh_streets.csv --port 5000
+```
+
+**Plotting Parameters:**
+- `--tree-csv`: Path to tree data CSV (default: `outputs/tree_data.csv`)
+- `--streetview-csv`: Path to street view CSV (default: `streetviews/chandigarh_streets.csv`)
+- `--data-dir`: Data directory path (default: `data`)
+- `--server-url`: Server URL for images (default: `http://localhost:8000`)
+- `--distance-threshold`: Distance threshold for duplicate removal in meters (default: 3.0)
+- `--port`: Port to serve the map (default: 5000)
+
+### Help
+
+Get detailed help for any operation:
+
+```bash
+./run.sh --help
+```
 
 ## Configuration
 
@@ -125,6 +167,7 @@ The system is configured through `config.py`. Key settings include:
 ### Input CSV Format
 Panorama ID CSV should contain:
 - `pano_id`: Google Street View panorama identifier
+- `lat`, `lng`: Panorama coordinates (for street view plotting)
 
 ### Output CSV Format
 Generated tree data CSV contains:
@@ -132,7 +175,13 @@ Generated tree data CSV contains:
 - `tree_lat`, `tree_lng`: Tree coordinates
 - `conf`: Detection confidence score
 - `image_path`: Path to source image
+- `stview_lat`, `stview_lng`: Street view coordinates
 - Additional metadata fields
+
+### Ground Truth Format
+Ground truth CSV should contain:
+- `tree_lat`, `tree_lng`: Ground truth tree coordinates
+- `pano_id`: Associated panorama identifier
 
 ## Pipeline Workflow
 
@@ -142,7 +191,20 @@ Generated tree data CSV contains:
 4. **Depth Estimation**: Generate depth maps using DepthAnything V2
 5. **Quality Assessment**: Filter detections using mask quality model
 6. **Geolocation**: Calculate precise tree coordinates using depth and camera parameters
-7. **Output Generation**: Save results to CSV format
+7. **Duplicate Removal**: Remove duplicate trees within configurable distance threshold
+
+## Visualization Features
+
+The interactive plotting system provides:
+
+- **Interactive Maps**: Real-time folium-based maps with zoom and pan
+- **Tree Markers**: Green circle markers showing detected tree locations
+- **Street View Markers**: Blue circle markers showing panorama locations
+- **Connection Lines**: Red lines connecting trees to their source panoramas
+- **Image Popups**: Click markers to view associated images
+- **Duplicate Removal**: Automatic removal of trees within 3m distance threshold
+- **Responsive Design**: Full-screen maps with no scrollbars
+- **Live Streaming**: Maps served via Flask without saving HTML files
 
 ## Models
 
@@ -166,6 +228,10 @@ The evaluation system provides:
 Future improvements and planned features:
 
 - [x] **Flag-based saving for depth maps and segmentation masks** - Add config flags to optionally save intermediate processing results (depth maps, segmentation masks) for debugging and analysis purposes.
+
+- [x] **Interactive visualization system** - Real-time interactive maps with tree and street view markers, connection lines, and image popups.
+
+- [x] **Unified command-line interface** - Single script for pipeline, evaluation, and visualization operations.
 
 - [ ] **Multiview triangulation** - Implement triangulation algorithms to improve tree localization accuracy by combining detections from multiple panorama viewpoints.
 
