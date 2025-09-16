@@ -334,7 +334,7 @@ def main():
     parser.add_argument('--server-url', default='http://localhost:8000', help='Server URL for images')
     parser.add_argument('--distance-threshold', type=float, default=3.0, 
                        help='Distance threshold for duplicate removal in meters')
-    parser.add_argument('--port', type=int, default=5000, help='Port to serve the map')
+    parser.add_argument('--port', type=int, default=5001, help='Port to serve the map')
     
     args = parser.parse_args()
     
