@@ -1,0 +1,97 @@
+---
+globs: eval/*.py,scripts/*.py
+---
+
+# Evaluation and Visualization Patterns
+
+## Evaluation System ([eval/eval.py](mdc:eval/eval.py))
+
+### Evaluation Metrics
+- **Precision**: True positives / (True positives + False positives)
+- **Recall**: True positives / (True positives + False negatives)  
+- **F1 Score**: Harmonic mean of precision and recall
+- **Distance-based matching**: Configurable thresholds (3m, 5m)
+
+### Ground Truth Matching
+- Uses geodesic distance calculations for accurate matching
+- Configurable distance thresholds for different evaluation scenarios
+- Duplicate removal with configurable distance thresholds (2m, 5m)
+
+### Usage Pattern
+```bash
+./run.sh --eval [predictions_csv_path]
+# Default: ./outputs/chandigarh_trees.csv
+```
+
+## Visualization System ([src/utils/plot.py](mdc:src/utils/plot.py))
+
+### Interactive Map Features
+- **Real-time Folium-based maps** with zoom and pan capabilities
+- **Tree Markers**: Green circle markers showing detected tree locations
+- **Street View Markers**: Blue circle markers showing panorama locations  
+- **Connection Lines**: Red lines connecting trees to source panoramas
+- **Image Popups**: Click markers to view associated images
+- **Responsive Design**: Full-screen maps without scrollbars
+
+### Visualization Parameters
+- `--tree-csv` - Path to tree data CSV
+- `--streetview-csv` - Path to street view CSV  
+- `--data-dir` - Data directory for images
+- `--server-url` - Image server URL (default: http://localhost:8000)
+- `--distance-threshold` - Duplicate removal distance (default: 3.0m)
+- `--port` - Map server port (default: 5000)
+
+### Background Services
+- **Image Server**: Automatic HTTP server on port 8000 for serving images
+- **Map Server**: Flask server on port 5000 for interactive maps
+- **Process Management**: Automatic cleanup of background processes
+
+## Script Utilities (`scripts/`)
+
+### Panorama Collection Scripts
+- [scripts/get_panos_in_city.py](mdc:scripts/get_panos_in_city.py) - Collect panoramas for city boundaries
+- [scripts/get_panos_on_street.py](mdc:scripts/get_panos_on_street.py) - Collect panoramas along specific streets
+- [scripts/get_panos_in_geojson.py](mdc:scripts/get_panos_in_geojson.py) - Collect panoramas within GeoJSON boundaries
+
+### Visualization Scripts  
+- [scripts/view_panos.py](mdc:scripts/view_panos.py) - Preview panorama locations
+- [scripts/overlay_mask.py](mdc:scripts/overlay_mask.py) - Overlay segmentation masks on images
+
+### Training Data Scripts
+- [scripts/get_views_for_train_bhavi.py](mdc:scripts/get_views_for_train_bhavi.py) - Generate training data
+- [scripts/get_views_for_train_bhavi_old.py](mdc:scripts/get_views_for_train_bhavi_old.py) - Legacy training data generation
+
+## Performance Analysis
+
+### Evaluation Workflow
+1. Load predictions from CSV file
+2. Load ground truth data
+3. Apply distance-based matching algorithm
+4. Calculate precision, recall, and F1 scores
+5. Generate detailed performance reports
+
+### Visualization Workflow  
+1. Load tree detection results
+2. Load street view metadata
+3. Remove duplicate trees within threshold
+4. Generate interactive map with markers
+5. Serve map via Flask with background image server
+
+## Integration Patterns
+
+### Unified Command Interface
+All evaluation and visualization operations integrate with [run.sh](mdc:run.sh):
+- Consistent argument passing
+- Automatic dependency management
+- Background service coordination
+- Error handling and cleanup
+
+### Data Format Compatibility
+- Works with standard CSV formats from pipeline output
+- Compatible with ground truth data formats
+- Handles missing data and edge cases gracefully
+
+### Extensibility
+- Modular design allows easy addition of new metrics
+- Visualization components can be extended with new marker types
+- Script utilities provide templates for custom data collection
