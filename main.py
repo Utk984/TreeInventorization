@@ -7,6 +7,7 @@ from config import Config
 import torch
 from ultralytics import YOLO
 import asyncio
+from src.utils.system_resources import get_safe_concurrency_estimate
 
 logger = logging.getLogger(__name__)
 
@@ -49,9 +50,17 @@ def main():
         # Load models
         tree_model = load_models(config)
         
+        # Calculate optimal concurrency based on system resources
+        if args.max_concurrent is not None:
+            optimal_concurrent = args.max_concurrent
+            logger.info(f"🔧 Using user-specified concurrency: {optimal_concurrent}")
+        else:
+            optimal_concurrent = get_safe_concurrency_estimate()
+            logger.info(f"🔧 Auto-calculated optimal concurrency: {optimal_concurrent}")
+        
         # Run parallel pipeline
         logger.info("🔄 Starting parallel panorama processing pipeline")
-        asyncio.run(process_panoramas_parallel(config, tree_model, max_concurrent=3))
+        asyncio.run(process_panoramas_parallel(config, tree_model, max_concurrent=optimal_concurrent))
         
         total_time = time.time() - pipeline_start_time
         logger.info("=" * 60)
