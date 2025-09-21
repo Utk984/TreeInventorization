@@ -1,0 +1,76 @@
+---
+globs: config.py,cli.py,run.sh
+---
+
+# Configuration and CLI Management
+
+## Configuration System
+
+The project uses a centralized configuration approach via [config.py](mdc:config.py):
+
+### Core Configuration Class
+```python
+class Config:
+    def __init__(self):
+        # Base directories and paths
+        self.ROOT_DIR, self.DATA_DIR, self.VIEW_DIR, self.FULL_DIR, etc.
+        
+        # Model paths
+        self.TREE_MODEL_PATH = "models/TreeModelV3/weights/best.pt"
+        self.DEPTH_MODEL_PATH = "models/DepthAnything/checkpoints/..."
+        self.DEPTH_CALIBRATION_MODEL_PATH = "models/CalibrateDepth/weights/..."
+        self.MASK_MODEL_PATH = "models/MaskQuality/weights/best_overall.pt"
+        
+        # Processing parameters
+        self.FOV = 90  # Field of view
+        self.WIDTH = 1024  # Image width
+        self.HEIGHT = 720  # Image height
+        self.BATCH_SIZE = 10
+        
+        # Feature flags
+        self.SAVE_DEPTH_MAPS = False
+        self.SAVE_MASK_JSON = False
+```
+
+## CLI Argument System
+
+### Argument Parsing ([cli.py](mdc:cli.py))
+- `parse_args()` - Parses command line arguments with defaults
+- `build_config(args)` - Builds Config object from parsed arguments
+
+### Supported Arguments
+- `--input_csv, -i` - Path to panorama ID CSV
+- `--output_csv, -o` - Output CSV path
+- `--fov` - Horizontal field of view (degrees)
+- `--width` - Perspective view width (pixels)
+- `--height` - Perspective view height (pixels)
+- `--save_depth_maps` - Save depth maps flag
+- `--save_mask_json` - Save mask JSON flag
+
+## Unified Script Interface ([run.sh](mdc:run.sh))
+
+### Main Operations
+- `./run.sh --pipeline [args...]` - Run tree detection pipeline
+- `./run.sh --eval [args...]` - Run evaluation against ground truth
+- `./run.sh --plot [args...]` - Run interactive visualization
+
+### Script Features
+- Dependency checking and automatic installation
+- Colored output for status messages
+- Background server management for plotting
+- Comprehensive help system
+- Error handling with proper exit codes
+
+### Environment Management
+- Python dependency validation
+- Virtual environment compatibility
+- Model weight validation
+- Directory structure creation
+
+## Configuration Best Practices
+
+1. **Default Values**: All parameters have sensible defaults in config.py
+2. **Override Pattern**: CLI arguments override config defaults via build_config()
+3. **Path Management**: All paths are absolute and created automatically
+4. **Logging Setup**: Centralized logging configuration with timestamped files
+5. **Device Detection**: Automatic CUDA/CPU device selection

@@ -1,0 +1,42 @@
+---
+alwaysApply: true
+---
+
+# TreeInventorization Project Structure
+
+This is a comprehensive street-level tree detection and inventory system that processes Google Street View panoramas to identify, segment, and geolocate trees in urban environments.
+
+## Core Architecture
+
+The main entry points are:
+- [main.py](mdc:main.py) - Main pipeline execution with model loading and parallel processing
+- [run.sh](mdc:run.sh) - Unified script for pipeline, evaluation, and visualization operations
+- [cli.py](mdc:cli.py) - Command-line argument parsing and configuration building
+- [config.py](mdc:config.py) - Central configuration management with paths, model settings, and logging
+
+## Key Directories
+
+### Source Code (`src/`)
+- `src/pipeline/` - Main processing pipelines ([pano_async.py](mdc:src/pipeline/pano_async.py), [pano_parallel.py](mdc:src/pipeline/pano_parallel.py))
+- `src/inference/` - AI model inference modules ([depth.py](mdc:src/inference/depth.py), [segment.py](mdc:src/inference/segment.py))
+- `src/utils/` - Utility functions for geodesic calculations, transformations, plotting, etc.
+- `src/visualization/` - Visualization components
+
+### Data Structure
+- `data/` - Main data directory (images, panoramas, perspectives, depth maps, masks, logs)
+- `models/` - Pre-trained model weights (gitignored - TreeModelV3, DepthAnything, CalibrateDepth, MaskQuality)
+- `streetviews/` - Panorama metadata CSV files
+- `outputs/` - Generated tree detection results
+- `eval/` - Evaluation tools and ground truth data
+
+### Processing Flow
+1. **Input**: Panorama IDs from CSV files in `streetviews/`
+2. **Processing**: Parallel panorama processing via [src/pipeline/pano_parallel.py](mdc:src/pipeline/pano_parallel.py)
+3. **AI Models**: Tree segmentation (YOLO), depth estimation (DepthAnything V2), quality assessment
+4. **Output**: Tree coordinates and metadata in `outputs/` directory
+
+## Usage Patterns
+- Use `./run.sh --pipeline` for tree detection
+- Use `./run.sh --eval` for evaluation against ground truth
+- Use `./run.sh --plot` for interactive visualization
+- All operations support custom arguments passed through the unified script

@@ -1,0 +1,65 @@
+---
+description: "Pipeline workflow and processing patterns"
+---
+
+# TreeInventorization Pipeline Workflow
+
+## Main Pipeline Flow
+
+The tree detection pipeline follows this sequence:
+
+1. **Initialization** ([main.py](mdc:main.py))
+   - Parse CLI arguments via [cli.py](mdc:cli.py)
+   - Build configuration from [config.py](mdc:config.py)
+   - Load YOLO tree segmentation model
+
+2. **Parallel Processing** ([src/pipeline/pano_parallel.py](mdc:src/pipeline/pano_parallel.py))
+   - Asynchronous panorama processing with configurable concurrency
+   - Fetch Google Street View panoramas and depth maps
+   - Generate perspective views from panoramas
+
+3. **AI Model Inference**
+   - Tree segmentation via [src/inference/segment.py](mdc:src/inference/segment.py)
+   - Depth estimation via [src/inference/depth.py](mdc:src/inference/depth.py)
+   - Mask quality verification for filtering false positives
+
+4. **Geolocation Processing**
+   - Calculate precise tree coordinates using depth maps and camera parameters
+   - Apply geodesic transformations via [src/utils/geodesic.py](mdc:src/utils/geodesic.py)
+   - Remove duplicate trees within configurable distance threshold
+
+5. **Output Generation**
+   - Save tree detection results to CSV in `outputs/` directory
+   - Optional: Save depth maps and mask JSON files if configured
+
+## Key Processing Modules
+
+### Pipeline Controllers
+- [src/pipeline/pano_parallel.py](mdc:src/pipeline/pano_parallel.py) - Main parallel processing controller
+- [src/pipeline/pano_async.py](mdc:src/pipeline/pano_async.py) - Asynchronous processing utilities
+
+### Model Inference
+- [src/inference/segment.py](mdc:src/inference/segment.py) - YOLO tree segmentation
+- [src/inference/depth.py](mdc:src/inference/depth.py) - DepthAnything V2 depth estimation
+
+### Utility Processing
+- [src/utils/unwrap.py](mdc:src/utils/unwrap.py) - Panorama to perspective view conversion
+- [src/utils/transformation.py](mdc:src/utils/transformation.py) - Coordinate transformations
+- [src/utils/masks.py](mdc:src/utils/masks.py) - Mask processing and quality assessment
+
+## Configuration Patterns
+
+All processing parameters are centralized in [config.py](mdc:config.py):
+- Model paths and device settings
+- Image dimensions and field of view
+- Directory structure and logging
+- Batch size and concurrency limits
+- Optional data saving flags
+
+## Error Handling and Logging
+
+The pipeline includes comprehensive logging:
+- Timestamped logs saved to `data/logs/` directory
+- Progress tracking for batch processing
+- Error handling with detailed stack traces
+- Performance metrics and timing information

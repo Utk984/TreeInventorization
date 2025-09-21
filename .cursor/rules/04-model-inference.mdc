@@ -1,0 +1,84 @@
+---
+globs: src/inference/*.py,models/**/*
+---
+
+# AI Model Inference and Components
+
+## Model Architecture Overview
+
+The TreeInventorization system uses multiple specialized AI models for comprehensive tree detection:
+
+### 1. Tree Segmentation Models
+- **TreeModelV3** - YOLO-based trunk segmentation (`models/TreeModelV3/weights/best.pt`)
+- **TreeModel** - YOLO-based tree segmentation model
+- **Implementation**: [src/inference/segment.py](mdc:src/inference/segment.py)
+
+### 2. Depth Estimation Models  
+- **DepthAnything V2** - Vision Transformer for metric depth estimation
+- **Model Path**: `models/DepthAnything/checkpoints/depth_anything_v2_metric_vkitti_vitl.pth`
+- **Implementation**: [src/inference/depth.py](mdc:src/inference/depth.py)
+- **Configurations**: Support for ViT-S, ViT-B, ViT-L variants
+
+### 3. Calibration and Quality Models
+- **CalibrateDepth** - Random Forest model for depth calibration (`models/CalibrateDepth/weights/random_forest.pkl`)
+- **MaskQuality** - Quality assessment for segmentation masks (`models/MaskQuality/weights/best_overall.pt`)
+
+## Model Loading Patterns
+
+### Standard Loading in [main.py](mdc:main.py)
+```python
+def load_models(config: Config):
+    tree_model = YOLO(config.TREE_MODEL_PATH)
+    # Additional models loaded as needed
+    return tree_model
+```
+
+### Model Configuration
+Models are configured through [config.py](mdc:config.py) with:
+- Device selection (CUDA/CPU automatic detection)
+- Model-specific parameters (encoder types, feature dimensions)
+- Batch processing settings
+
+## Inference Workflows
+
+### Tree Segmentation ([src/inference/segment.py](mdc:src/inference/segment.py))
+1. Load panorama perspective views
+2. Apply YOLO model for tree detection
+3. Generate segmentation masks
+4. Extract bounding boxes and confidence scores
+
+### Depth Estimation ([src/inference/depth.py](mdc:src/inference/depth.py))
+1. Process perspective views through DepthAnything V2
+2. Generate metric depth maps
+3. Apply calibration using Random Forest model
+4. Convert relative depth to absolute coordinates
+
+### Quality Assessment
+1. Evaluate mask quality using dedicated model
+2. Filter false positives based on quality scores
+3. Ensure reliable tree detections for geolocation
+
+## Model Integration Patterns
+
+### Parallel Processing Support
+- Models work with asynchronous processing pipeline
+- Batch processing for efficiency
+- Memory management for large-scale processing
+
+### Geolocation Integration
+- Depth maps combined with camera parameters
+- Coordinate transformations for precise tree positioning
+- Integration with geodesic calculations
+
+## Model Requirements
+
+### Dependencies
+- PyTorch for deep learning models
+- Ultralytics YOLO for object detection
+- Transformers for ViT-based depth estimation
+- Scikit-learn for Random Forest calibration
+
+### Hardware Requirements
+- CUDA-capable GPU recommended for inference speed
+- Sufficient VRAM for batch processing
+- CPU fallback available for all models

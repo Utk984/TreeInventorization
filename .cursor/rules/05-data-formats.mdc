@@ -1,0 +1,100 @@
+---
+globs: *.csv,data/**/*,streetviews/*.csv,outputs/*.csv
+---
+
+# Data Formats and File Structure
+
+## Input Data Formats
+
+### Panorama ID CSV (`streetviews/*.csv`)
+Required columns for panorama metadata:
+```csv
+pano_id,lat,lng
+YHuImFJqNsGqB6W2tKxB8w,30.7333,76.7794
+[Google Street View panorama ID],[latitude],[longitude]
+```
+
+### Ground Truth CSV (`eval/chandigarh_groundtruth.csv`)
+Required columns for evaluation:
+```csv
+tree_lat,tree_lng,pano_id
+30.7334,76.7795,YHuImFJqNsGqB6W2tKxB8w
+[tree_latitude],[tree_longitude],[source_panorama_id]
+```
+
+## Output Data Formats
+
+### Tree Detection CSV (`outputs/*.csv`)
+Generated tree detection results:
+```csv
+pano_id,tree_lat,tree_lng,conf,image_path,stview_lat,stview_lng
+YHuImFJqNsGqB6W2tKxB8w,30.7334,76.7795,0.85,data/views/...,30.7333,76.7794
+```
+
+Columns:
+- `pano_id` - Source panorama identifier
+- `tree_lat`, `tree_lng` - Calculated tree coordinates
+- `conf` - Detection confidence score (0-1)
+- `image_path` - Path to source perspective view
+- `stview_lat`, `stview_lng` - Street view camera coordinates
+
+## Data Directory Structure
+
+### Core Data Directories (`data/`)
+```
+data/
+├── full/           # Full panorama images (.jpg)
+├── views/          # Perspective view images (.jpg)
+├── depth_maps/     # Generated depth maps (.npy, .png)
+├── masks/          # Segmentation masks (.json, .png)
+└── logs/           # Processing logs (.log)
+```
+
+### Image Naming Conventions
+- **Panoramas**: `{pano_id}.jpg` (e.g., `YHuImFJqNsGqB6W2tKxB8w.jpg`)
+- **Perspective Views**: `{pano_id}_view_{angle}.jpg` (e.g., `YHuImFJqNsGqB6W2tKxB8w_view_0.jpg`)
+- **Depth Maps**: `{pano_id}_view_{angle}_depth.npy`
+- **Masks**: `{pano_id}_view_{angle}_mask.json`
+
+### Processing Metadata
+- **Logs**: Timestamped files `YYYY-MM-DD_HH-MM-SS_pipeline.log`
+- **Configuration**: Runtime parameters and model paths
+- **Progress**: Batch processing status and error tracking
+
+## File Format Specifications
+
+### Depth Maps
+- **Format**: NumPy arrays (.npy) or PNG images
+- **Data Type**: Float32 for metric depth values
+- **Units**: Meters from camera position
+- **Shape**: [height, width] matching perspective view dimensions
+
+### Segmentation Masks
+- **JSON Format**: Bounding boxes and polygons
+- **PNG Format**: Binary masks (0/255 values)
+- **Coordinates**: Pixel coordinates in perspective view space
+- **Confidence**: Per-detection confidence scores
+
+### CSV Encoding
+- **Encoding**: UTF-8
+- **Delimiter**: Comma (,)
+- **Headers**: Always included in first row
+- **Precision**: 6 decimal places for coordinates
+- **Missing Values**: Empty strings or "NULL"
+
+## Data Processing Patterns
+
+### Batch Processing
+- Process panoramas in configurable batches
+- Maintain file naming consistency
+- Handle missing or corrupted data gracefully
+
+### Coordinate Systems
+- **Input**: WGS84 decimal degrees (lat, lng)
+- **Processing**: Local coordinate transformations
+- **Output**: WGS84 decimal degrees with high precision
+
+### Quality Control
+- Validate CSV formats before processing
+- Check for required columns and data types
+- Log data quality issues and missing files

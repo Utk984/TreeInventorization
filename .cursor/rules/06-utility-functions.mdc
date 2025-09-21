@@ -1,0 +1,112 @@
+---
+globs: src/utils/*.py
+---
+
+# Utility Functions and Helper Modules
+
+## Core Utility Modules
+
+### Geodesic Calculations ([src/utils/geodesic.py](mdc:src/utils/geodesic.py))
+- **Purpose**: Geographic coordinate transformations and distance calculations
+- **Key Functions**: 
+  - Convert pixel coordinates to geographic coordinates
+  - Calculate distances between points using geodesic methods
+  - Handle coordinate system transformations (WGS84, local projections)
+- **Dependencies**: GeoPy, pyproj for accurate geodesic calculations
+
+### Image Transformations ([src/utils/transformation.py](mdc:src/utils/transformation.py))
+- **Purpose**: Camera and image coordinate transformations
+- **Key Functions**:
+  - Convert between panorama and perspective coordinates
+  - Apply camera intrinsic/extrinsic parameters
+  - Handle field of view and projection transformations
+- **Integration**: Works with depth maps for 3D positioning
+
+### Panorama Unwrapping ([src/utils/unwrap.py](mdc:src/utils/unwrap.py))
+- **Purpose**: Convert 360° panoramas to perspective views
+- **Key Functions**:
+  - Generate multiple perspective views from single panorama
+  - Handle different field of view settings
+  - Maintain proper aspect ratios and image quality
+- **Parameters**: FOV, width, height, viewing angles
+
+### Mask Processing ([src/utils/masks.py](mdc:src/utils/masks.py))
+- **Purpose**: Segmentation mask manipulation and quality assessment
+- **Key Functions**:
+  - Process YOLO detection outputs
+  - Convert between mask formats (polygon, bitmap)
+  - Quality scoring and filtering
+- **Integration**: Works with MaskQuality model for validation
+
+### Depth Calibration ([src/utils/depth_calibration.py](mdc:src/utils/depth_calibration.py))
+- **Purpose**: Convert relative depth to metric depth
+- **Key Functions**:
+  - Apply Random Forest calibration model
+  - Scale depth values to real-world measurements
+  - Handle depth map preprocessing and postprocessing
+- **Models**: Integrates CalibrateDepth Random Forest model
+
+### Interactive Plotting ([src/utils/plot.py](mdc:src/utils/plot.py))
+- **Purpose**: Generate interactive maps and visualizations
+- **Key Functions**:
+  - Create Folium-based interactive maps
+  - Display tree markers and street view locations
+  - Handle image popups and connection lines
+  - Serve maps via Flask web server
+- **Features**: 
+  - Real-time duplicate removal
+  - Responsive design with no scrollbars
+  - Background image server management
+
+## Utility Function Patterns
+
+### Error Handling
+- Comprehensive exception handling in all utility functions
+- Graceful degradation when optional operations fail
+- Detailed logging for debugging and monitoring
+
+### Performance Optimization
+- Vectorized operations where possible
+- Efficient coordinate transformations
+- Memory-conscious processing for large datasets
+
+### Configuration Integration
+- All utilities respect [config.py](mdc:config.py) settings
+- Configurable parameters (distances, thresholds, image sizes)
+- Device-aware processing (CUDA/CPU)
+
+### Data Pipeline Integration
+- Utilities designed for async/parallel processing
+- Batch processing support
+- Consistent input/output formats
+
+## Common Usage Patterns
+
+### Coordinate Transformations
+```python
+# Convert pixel to geographic coordinates
+geo_coords = pixel_to_geo(pixel_x, pixel_y, depth, camera_params)
+
+# Calculate distance between trees
+distance = geodesic_distance(tree1_coords, tree2_coords)
+```
+
+### Panorama Processing
+```python
+# Generate perspective views
+views = unwrap_panorama(panorama_image, fov=90, num_views=4)
+
+# Process each view through models
+for view in views:
+    masks = segment_trees(view)
+    depth = estimate_depth(view)
+```
+
+### Quality Assessment
+```python
+# Filter high-quality detections
+good_masks = filter_masks_by_quality(masks, threshold=0.7)
+
+# Remove duplicate trees
+unique_trees = remove_duplicates(tree_coords, distance_threshold=3.0)
+```

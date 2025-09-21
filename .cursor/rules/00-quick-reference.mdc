@@ -1,0 +1,65 @@
+---
+alwaysApply: true
+---
+
+# TreeInventorization Quick Reference
+
+## 🚀 Quick Start Commands
+
+```bash
+# Run tree detection pipeline
+./run.sh --pipeline --input_csv streetviews/chandigarh_streets.csv --output_csv outputs/trees.csv
+
+# Evaluate results against ground truth  
+./run.sh --eval outputs/trees.csv
+
+# Generate interactive visualization
+./run.sh --plot --tree-csv outputs/trees.csv --port 5000
+```
+
+## 📁 Key Files to Know
+
+- **[main.py](mdc:main.py)** - Main pipeline entry point
+- **[config.py](mdc:config.py)** - Central configuration (paths, models, parameters)
+- **[run.sh](mdc:run.sh)** - Unified script for all operations
+- **[src/pipeline/pano_parallel.py](mdc:src/pipeline/pano_parallel.py)** - Core parallel processing
+- **[src/inference/segment.py](mdc:src/inference/segment.py)** - Tree segmentation (YOLO)
+- **[src/inference/depth.py](mdc:src/inference/depth.py)** - Depth estimation (DepthAnything V2)
+- **[src/utils/plot.py](mdc:src/utils/plot.py)** - Interactive visualization
+- **[eval/eval.py](mdc:eval/eval.py)** - Model evaluation
+
+## 🔧 Common Customizations
+
+### Configuration Changes ([config.py](mdc:config.py))
+- Model paths: `TREE_MODEL_PATH`, `DEPTH_MODEL_PATH`, etc.
+- Image settings: `FOV`, `WIDTH`, `HEIGHT`
+- Data directories: `DATA_DIR`, `OUTPUT_DIR`
+- Feature flags: `SAVE_DEPTH_MAPS`, `SAVE_MASK_JSON`
+
+### CLI Arguments ([cli.py](mdc:cli.py))
+- Input/output paths: `--input_csv`, `--output_csv`
+- Processing parameters: `--fov`, `--width`, `--height`
+- Data saving: `--save_depth_maps`, `--save_mask_json`
+
+## 🧠 AI Models Used
+
+- **TreeModelV3** - YOLO trunk segmentation (`models/TreeModelV3/`)
+- **DepthAnything V2** - Depth estimation (`models/DepthAnything/`)
+- **CalibrateDepth** - Random Forest depth calibration (`models/CalibrateDepth/`)
+- **MaskQuality** - Segmentation quality assessment (`models/MaskQuality/`)
+
+## 📊 Data Flow
+
+1. **Input**: Panorama IDs from `streetviews/*.csv`
+2. **Processing**: Parallel panorama processing with AI models
+3. **Output**: Tree coordinates in `outputs/*.csv`
+4. **Evaluation**: Compare against `eval/chandigarh_groundtruth.csv`
+5. **Visualization**: Interactive maps with tree markers
+
+## 🛠️ Development Tips
+
+- All paths are configured in [config.py](mdc:config.py) - modify there first
+- Use [run.sh](mdc:run.sh) for consistent operation execution
+- Check `data/logs/` for detailed processing logs
+- Models directory is gitignored - must be populated manually
+- Utilities in `src/utils/` handle coordinate transformations and geodesic calculations
