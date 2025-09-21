@@ -14,6 +14,7 @@ class TreeStreetViewPlotter:
     """Main class for plotting trees and street views with interactive features."""
     
     def __init__(self, tree_csv_path: str, streetview_csv_path: str, 
+                 groundtruth_csv_path: str,
                  data_dir: str = "data", server_url: str = "http://localhost:8000"):
         """
         Initialize the plotter with data paths and server configuration.
@@ -21,25 +22,32 @@ class TreeStreetViewPlotter:
         Args:
             tree_csv_path: Path to tree data CSV file
             streetview_csv_path: Path to street view CSV file
+            groundtruth_csv_path: Path to ground truth CSV file
             data_dir: Directory containing the data folder
             server_url: URL for serving static files
         """
         self.tree_csv_path = tree_csv_path
         self.streetview_csv_path = streetview_csv_path
+        self.groundtruth_csv_path = groundtruth_csv_path
         self.data_dir = data_dir
         self.server_url = server_url
         self.tree_data = None
         self.streetview_data = None
         self.cleaned_tree_data = None
-        
+        self.groundtruth_data = None
+
     def load_data(self):
         """Load tree and street view data from CSV files."""
         print("Loading data...")
         self.tree_data = pd.read_csv(self.tree_csv_path)
+        # keep the rows where distance_pano < 10
+        self.tree_data = self.tree_data[self.tree_data['distance_pano'] < 12]
         self.streetview_data = pd.read_csv(self.streetview_csv_path)
         print(f"Loaded {len(self.tree_data)} tree records")
         print(f"Loaded {len(self.streetview_data)} street view records")
-        
+        self.groundtruth_data = pd.read_csv(self.groundtruth_csv_path)
+        print(f"Loaded {len(self.groundtruth_data)} ground truth records")
+
     def remove_duplicate_trees(self, distance_threshold: float = 3.0) -> pd.DataFrame:
         """
         Remove duplicate trees based on distance threshold.
@@ -113,7 +121,6 @@ class TreeStreetViewPlotter:
         else:
             # Street view image - use full directory
             image_url = f"{self.server_url}/full/{filename}"
-        
         html = f"""
         <div style="text-align: center;">
             <h4>{title}</h4>
@@ -144,7 +151,8 @@ class TreeStreetViewPlotter:
             zoom_start=15,
             tiles='OpenStreetMap',
             width='100%',
-            height='100%'
+            height='100%',
+            max_zoom=25,
         )
         
         # Add tree markers
@@ -164,8 +172,7 @@ class TreeStreetViewPlotter:
                     color='green',
                     fill=True,
                     fillColor='green',
-                    fillOpacity=0.8,
-                    tooltip=f"Tree: {row['pano_id']}"
+                    fillOpacity=0.8
                 ).add_to(m)
         
         # Add street view markers
@@ -186,8 +193,21 @@ class TreeStreetViewPlotter:
                     color='blue',
                     fill=True,
                     fillColor='blue',
-                    fillOpacity=0.8,
-                    tooltip=f"Street View: {row['pano_id']}"
+                    fillOpacity=0.8
+                ).add_to(m)
+
+        # Add ground truth markers
+        print("Adding ground truth markers...")
+        for _, row in self.groundtruth_data.iterrows():
+            if pd.notna(row['tree_lat']) and pd.notna(row['tree_lng']):
+                folium.CircleMarker(
+                    [row['tree_lat'], row['tree_lng']],
+                    popup=folium.Popup(f"Ground Truth at ({row['tree_lat']:.6f}, {row['tree_lng']:.6f})"),
+                    radius=0.2,
+                    color='purple',
+                    fill=True,
+                    fillColor='purple',
+                    fillOpacity=0.8
                 ).add_to(m)
         
         # Add connection lines between trees and street views
@@ -328,8 +348,9 @@ def create_flask_app(plotter):
 def main():
     """Main function to run the plotter from command line."""
     parser = argparse.ArgumentParser(description='Plot trees and street views on interactive map')
-    parser.add_argument('--tree-csv', required=True, help='Path to tree data CSV file')
-    parser.add_argument('--streetview-csv', required=True, help='Path to street view CSV file')
+    parser.add_argument('--tree-csv', default='outputs/chandigarh_trees.csv', help='Path to tree data CSV file')
+    parser.add_argument('--streetview-csv', default='streetviews/chandigarh_streets.csv', help='Path to street view CSV file')
+    parser.add_argument('--groundtruth-csv', default='eval/chandigarh_groundtruth.csv', help='Path to ground truth CSV file')
     parser.add_argument('--data-dir', default='data', help='Data directory path')
     parser.add_argument('--server-url', default='http://localhost:8000', help='Server URL for images')
     parser.add_argument('--distance-threshold', type=float, default=3.0, 
@@ -342,6 +363,7 @@ def main():
     plotter = TreeStreetViewPlotter(
         tree_csv_path=args.tree_csv,
         streetview_csv_path=args.streetview_csv,
+        groundtruth_csv_path=args.groundtruth_csv,
         data_dir=args.data_dir,
         server_url=args.server_url
     )

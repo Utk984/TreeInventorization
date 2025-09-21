@@ -1,47 +1,62 @@
 import math
-import logging
-import time
 import numpy as np
 from dataclasses import dataclass
 
-# Configure logger for geodesic calculations
-logger = logging.getLogger(__name__)
+# ------------------ Depth lookup (robust) ------------------
 
-def get_depth_at_pixel(depth_map, u, v, W, H, flipped=True):
+def get_depth_at_pixel(depth_map, u, v, W, H, flipped=True, method="bilinear"):
     """
-    Simple depth lookup from depth map at pixel coordinates.
-    
-    Args:
-        depth_map: streetlevel DepthMap object with .data as a NumPy array (shape: H_d x W_d).
-                   Values are meters; -1 indicates invalid (e.g., horizon).
-        u, v:      pixel coordinates in the high-res panorama image (same W x H you used).
-        W, H:      width and height of the high-res panorama image.
-        flipped:   True if the depth map is mirrored horizontally relative to RGB (your case).
-        method:    "nearest" (fast) or "bilinear" (smoother).
-        
-    Returns:
-        float depth in meters, or None if invalid/unavailable.
+    Return depth (meters) at pano pixel (u,v) from a low-res depth map.
+    - Values < 0 are invalid and ignored.
+    - 'flipped=True' mirrors horizontally BEFORE interpolation (recommended).
     """
     d = depth_map.data
     Hd, Wd = d.shape[:2]
 
-    # Simple coordinate mapping: scale high-res coords to depth map coords
-    ud = int(u * Wd / W)
-    vd = int(v * Hd / H)
-    
-    # Bounds check
-    if ud < 0 or ud >= Wd or vd < 0 or vd >= Hd:
+    # Normalize to [0,1]
+    u01 = u / float(W)
+    v01 = v / float(H)
+    if not (0.0 <= u01 <= 1.0 and 0.0 <= v01 <= 1.0):
         return None
 
-    # Horizontal flip if required
+    # Apply the horizontal flip on normalized coord first
     if flipped:
-        ud = Wd - 1 - ud
+        u01 = 1.0 - u01
 
-    val = float(d[vd, ud])
-    return val if val >= 0.0 else None
+    if method == "nearest":
+        ud = int(round(u01 * (Wd - 1)))
+        vd = int(round(v01 * (Hd - 1)))
+        val = float(d[vd, ud])
+        return val if val >= 0.0 else None
 
-# --- WGS84 helpers: build a local ENU frame at the pano's GPS ---
-_A  = 6378137.0               # semi-major axis [m]
+    # Bilinear sampling (recommended)
+    uf = u01 * (Wd - 1)
+    vf = v01 * (Hd - 1)
+    u0 = int(math.floor(uf)); v0 = int(math.floor(vf))
+    u1 = min(u0 + 1, Wd - 1); v1 = min(v0 + 1, Hd - 1)
+    du = uf - u0; dv = vf - v0
+
+    z00 = float(d[v0, u0]); z10 = float(d[v0, u1])
+    z01 = float(d[v1, u0]); z11 = float(d[v1, u1])
+
+    w00 = (1 - du) * (1 - dv)
+    w10 =      du  * (1 - dv)
+    w01 = (1 - du) *      dv
+    w11 =      du  *      dv
+
+    vals = np.array([z00, z10, z01, z11], dtype=float)
+    wts  = np.array([w00, w10, w01, w11], dtype=float)
+
+    # Ignore invalid neighbors
+    wts[vals < 0.0] = 0.0
+    s = wts.sum()
+    if s <= 0.0:
+        return None
+    return float((wts * vals).sum() / s)
+
+# ------------------ Local ENU utilities ------------------
+
+_A  = 6378137.0               # WGS84 semi-major axis [m]
 _F  = 1 / 298.257223563
 _E2 = _F * (2 - _F)           # eccentricity^2
 
@@ -57,9 +72,9 @@ def geodetic_to_ecef(lat, lon, h):
 def ecef_to_enu_matrix(lat0, lon0):
     s, c = math.sin(lat0), math.cos(lat0)
     sl, cl = math.sin(lon0), math.cos(lon0)
-    E = np.array([-sl,       cl,      0.0])
-    N = np.array([-s*cl, -s*sl,   c])
-    U = np.array([ c*cl,  c*sl,   s])
+    E = np.array([-sl,      cl,    0.0])
+    N = np.array([-s*cl, -s*sl,    c ])
+    U = np.array([ c*cl,  c*sl,    s ])
     return np.vstack([E, N, U])
 
 @dataclass
@@ -73,47 +88,6 @@ def make_local_frame(lat_deg, lon_deg, h_m=0.0):
     R    = ecef_to_enu_matrix(lat0, lon0)
     return LocalFrame(lat0, lon0, h_m, X0, R)
 
-# --- Pixel -> direction in camera, then rotate to world (ENU) ---
-def Rz(a):
-    c,s = math.cos(a), math.sin(a)
-    return np.array([[c,-s,0],[s,c,0],[0,0,1]], float)
-
-def Rx(a):
-    c,s = math.cos(a), math.sin(a)
-    return np.array([[1,0,0],[0,c,-s],[0,s,c]], float)
-
-def ray_world_dir(u, v, W, H, heading, pitch=0.0, roll=0.0):
-    """
-    heading/pitch/roll are radians.
-    (u=0,v=0) is top-left; u rightwards, v downwards.
-    """
-    # 1) pixel -> world azimuth/elevation (GPano)
-    az = heading + 2*math.pi*(u / W - 0.5)     # clockwise from North
-    el = math.pi * (0.5 - v / H)               # +up
-
-    # 2) base ENU unit vector from az/el
-    d = np.array([
-        math.sin(az) * math.cos(el),   # East
-        math.cos(az) * math.cos(el),   # North
-        math.sin(el)                   # Up
-    ], dtype=float)
-
-    # 3) apply pano pitch & roll about fixed ENU axes (X=East, Y=North)
-    cp, sp = math.cos(pitch), math.sin(pitch)
-    cr, sr = math.cos(roll),  math.sin(roll)
-
-    Rx = np.array([[1, 0, 0],
-                   [0, cp, -sp],
-                   [0, sp,  cp]], float)          # pitch about East (X)
-
-    Ry = np.array([[ cr, 0, sr],
-                   [  0, 1,  0],
-                   [-sr, 0, cr]], float)          # roll about North (Y)
-
-    d = Rx @ (Ry @ d)
-    return d / np.linalg.norm(d)
-
-# --- ENU -> lat/lon using pyproj (install: pip install pyproj) ---
 def enu_to_lla(X_enu, lf: LocalFrame):
     try:
         from pyproj import CRS, Transformer
@@ -126,48 +100,95 @@ def enu_to_lla(X_enu, lf: LocalFrame):
     lon, lat, h = to_lla.transform(X_ecef[0], X_ecef[1], X_ecef[2])
     return lat, lon, h
 
-# --- Main: pixel + depth -> lat/lon (and optional ground snap) ---
-def localize_pixel_with_depth(pano, u, v, W, H, depth_m,
-                              depth_is_slant=True,
-                              snap_to_ground=False,
-                              camera_height_m=2.6):
-    """
-    pano: object with fields lat, lon, elevation (optional), heading, pitch, roll  [radians]
-    (u,v): pixel coords in the same W x H image you used
-    depth_m: distance from camera (meters). From Street View depth this is a slant range.
-    depth_is_slant: True if 'depth_m' is along the ray (Street View default) -> use C + s*d
-    snap_to_ground: if True, drop to a flat ground plane z = ground_z near the camera
-    camera_height_m: used only if snap_to_ground=True and pano.elevation is camera altitude
-    """
-    # 1) Local frame centered at pano GPS (use pano.elevation if present else 0)
-    alt = getattr(pano, "elevation", 0.0) or 0.0
-    lf  = make_local_frame(pano.lat, pano.lon, alt)
+# ------------------ Camera ray construction ------------------
 
-    # 2) Camera center in ENU (it's the origin of this local frame)
+def pixel_to_cam_dir(u, v, W, H):
+    """
+    Equirectangular pixel -> CAMERA-FRAME unit direction.
+    Camera axes: x=right, y=up, z=forward.
+    """
+    theta = 2*math.pi*(u/W - 0.5)       # azimuth offset [-pi,pi]
+    phi   = math.pi*(0.5 - v/H)         # elevation [-pi/2,pi/2] (+up)
+    d = np.array([math.cos(phi)*math.sin(theta),
+                  math.sin(phi),
+                  math.cos(phi)*math.cos(theta)], float)
+    return d / np.linalg.norm(d)
+
+def Rz(a):
+    c, s = math.cos(a), math.sin(a)
+    return np.array([[c,-s,0],[s,c,0],[0,0,1]], float)
+
+def Rx(a):
+    c, s = math.cos(a), math.sin(a)
+    return np.array([[1,0,0],[0,c,-s],[0,s,c]], float)
+
+def ray_world_dir(u, v, W, H, heading, pitch=0.0, roll=0.0):
+    """
+    1) pixel -> camera-frame dir
+    2) world-from-camera rotation: yaw(heading) about Up, then pitch about camera X, then roll about camera Z
+    """
+    d_cam = pixel_to_cam_dir(u, v, W, H)
+    R_world_from_cam = Rz(heading) @ Rx(pitch) @ Rz(roll)
+    d_world = R_world_from_cam @ d_cam
+    return d_world / np.linalg.norm(d_world)
+
+# ------------------ Ground-constrained localization ------------------
+
+def intersect_ray_with_horizontal_plane(C, d, z_plane):
+    """Return intersection of ray X=C+t d with plane z=z_plane (ENU)."""
+    if abs(d[2]) < 1e-9:
+        return None  # parallel to plane
+    t = (z_plane - C[2]) / d[2]
+    if t <= 0:
+        return None  # behind camera
+    return C + t*d
+
+def localize_ground_pixel(pano, u, v, W, H,
+                          lf: LocalFrame,
+                          depth_map=None, flipped=True,
+                          default_camera_height=2.6,
+                          use_depth_to_estimate_height=True,
+                          plausible_height_range=(1.2, 4.5)):
+    """
+    Localize a GROUND point: intersect the viewing ray with a ground plane z = -h_cam.
+    If depth_map is provided, estimate h_cam ≈ -s * d_z (robust) at this pixel; else use default.
+    Returns: (lat, lon)
+    """
+    # Camera center at ENU origin for this pano's local frame
     C = np.zeros(3, float)
 
-    # 3) World ray direction
     heading = getattr(pano, "heading", 0.0) or 0.0
     pitch   = getattr(pano, "pitch",   0.0) or 0.0
     roll    = getattr(pano, "roll",    0.0) or 0.0
     d = ray_world_dir(u, v, W, H, heading, pitch, roll)
 
-    # 4) Point in ENU
-    if depth_is_slant:
-        X = C + depth_m * d           # slant range along the ray (Street View depth)
-    else:
-        # if depth is horizontal ground distance, march in horizontal azimuth only:
-        d_h = d.copy(); d_h[2] = 0.0
-        n = np.linalg.norm(d_h)
-        if n < 1e-9:
-            raise ValueError("Horizontal direction is degenerate at this pixel.")
-        X = C + depth_m * (d_h / n)
+    # Estimate camera height from depth at this ground pixel (optional)
+    h_cam = float(default_camera_height)
+    if depth_map is not None and use_depth_to_estimate_height:
+        s = get_depth_at_pixel(depth_map, u, v, W, H, flipped=flipped, method="bilinear")
+        if s is not None and abs(d[2]) > 1e-6:
+            h_est = - s * d[2]  # since ground_z = s*d_z, and ground_z = -h_cam (camera at z=0)
+            if plausible_height_range[0] <= h_est <= plausible_height_range[1]:
+                h_cam = float(h_est)
 
-    # 5) (Optional) snap to ground: assume local flat ground near the camera
-    if snap_to_ground:
-        ground_z = -float(camera_height_m)   # if camera z is approx ground+camera_height
-        X = X.copy(); X[2] = ground_z
+    Xg = intersect_ray_with_horizontal_plane(C, d, z_plane=-h_cam)
+    if Xg is None:
+        raise ValueError("Ray does not hit ground plane in front of camera (pixel too close to horizon).")
 
-    # 6) Convert to lat/lon
-    lat, lon, h = enu_to_lla(X, lf)
+    lat, lon, _ = enu_to_lla(Xg, lf)
+    return lat, lon
+
+# ------------------ (Optional) slant-depth localization for non-ground targets ------------------
+
+def localize_pixel_with_slant_depth(pano, u, v, W, H, depth_m, lf: LocalFrame):
+    """
+    Use slant depth along the ray (non-ground targets).
+    """
+    C = np.zeros(3, float)
+    heading = getattr(pano, "heading", 0.0) or 0.0
+    pitch   = getattr(pano, "pitch",   0.0) or 0.0
+    roll    = getattr(pano, "roll",    0.0) or 0.0
+    d = ray_world_dir(u, v, W, H, heading, pitch, roll)
+    X = C + float(depth_m) * d
+    lat, lon, _ = enu_to_lla(X, lf)
     return lat, lon
