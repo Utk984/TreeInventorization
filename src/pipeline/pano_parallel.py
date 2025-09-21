@@ -262,15 +262,10 @@ async def process_single_panorama(pano_id: str, config: Config, tree_model, sess
             logger.info("💾 Saving results to CSV")
             save_start = time.time()
             
-            # Use aiofiles for async file writing
+            # Use aiofiles for async file writing - always append data without header
+            # since headers are initialized at the start of processing
             async with aiofiles.open(config.OUTPUT_CSV, 'a') as f:
-                output_exists = os.path.exists(config.OUTPUT_CSV)
-                if not output_exists or os.path.getsize(config.OUTPUT_CSV) == 0:
-                    # Write header
-                    await f.write(df_part.to_csv(index=False, lineterminator="\n"))
-                else:
-                    # Write data without header
-                    await f.write(df_part.to_csv(index=False, header=False, lineterminator="\n"))
+                await f.write(df_part.to_csv(index=False, header=False, lineterminator="\n"))
             
             save_time = time.time() - save_start
             logger.info(f"✅ Results CSV saved in {save_time:.3f}s")
@@ -298,6 +293,20 @@ async def process_panoramas_parallel(config: Config, tree_model, max_concurrent=
         # Load panorama IDs
         logger.info(f"📋 Loading panorama IDs from: {config.PANORAMA_CSV}")
         pano_ids = pd.read_csv(config.PANORAMA_CSV)["pano_id"].tolist()
+        
+        # Initialize CSV file with headers to prevent race conditions
+        logger.info("📝 Initializing output CSV with headers")
+        if not os.path.exists(config.OUTPUT_CSV) or os.path.getsize(config.OUTPUT_CSV) == 0:
+            # Create empty DataFrame with correct columns for header
+            empty_df = pd.DataFrame(columns=[
+                'image_path', 'pano_id', 'stview_lat', 'stview_lng', 
+                'tree_lat_model', 'tree_lng_model', 'tree_lat', 'tree_lng',
+                'image_x', 'image_y', 'theta', 'conf', 'distance_model', 'distance_pano'
+            ])
+            empty_df.to_csv(config.OUTPUT_CSV, index=False)
+            logger.info(f"✅ CSV headers initialized: {config.OUTPUT_CSV}")
+        else:
+            logger.info(f"📄 Using existing CSV file: {config.OUTPUT_CSV}")
         
         # Create semaphore to limit concurrent panoramas
         semaphore = asyncio.Semaphore(max_concurrent)

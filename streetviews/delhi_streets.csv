@@ -1,4 +1,4 @@
-pano_id,lat,lon,date,address,elevation,link,heading,country_code,source,copyright_message,street_names
+pano_id,lat,lng,date,address,elevation,link,heading,country_code,source,copyright_message,street_names
 L9pTm3fkd2mcptmy3D9j2g,28.58897589960362,77.19508209037531,2022-04,"Madhu Limaye Marg, New Delhi, Delhi",245.4812927246094,"<bound method StreetViewPanorama.permalink of L9pTm3fkd2mcptmy3D9j2g (28.58898, 77.19508) [2022-04]>",2.7126900274003134,IN,launch,© 2025 Google,"Madhu Limaye Marg, Vinay Marg"
 0fJ42Kof1kA_O8-mvLsW2g,28.58882417969837,77.19491837369578,2022-04,"Vinay Marg, New Delhi, Delhi",246.0628814697266,"<bound method StreetViewPanorama.permalink of 0fJ42Kof1kA_O8-mvLsW2g (28.58882, 77.19492) [2022-04]>",3.5567858591197625,IN,launch,© 2025 Google,Vinay Marg
 _8bd2WtsEsVPMEkN9rio0g,28.58872490767383,77.19486581936539,2022-04,"Vinay Marg, New Delhi, Delhi",246.2924957275391,"<bound method StreetViewPanorama.permalink of _8bd2WtsEsVPMEkN9rio0g (28.58872, 77.19487) [2022-04]>",3.555705148349409,IN,launch,© 2025 Google,Vinay Marg

@@ -95,10 +95,3 @@ def calculate_optimal_concurrency(
     logger.info(f"  Optimal concurrent: {optimal_concurrent}")
     
     return optimal_concurrent
-
-def get_safe_concurrency_estimate() -> int:
-    """
-    Get a safe estimate of concurrent processes for panorama processing.
-    This is a convenience function that auto-detects resources and calculates optimal concurrency.
-    """
-    return calculate_optimal_concurrency()

@@ -19,6 +19,7 @@ class Config:
         self.DEPTH_DIR = os.path.join(self.DATA_DIR, "depth_maps")
         self.MASK_DIR = os.path.join(self.DATA_DIR, "masks")
         self.OUTPUT_DIR = os.path.join(self.ROOT_DIR, "outputs")
+        self.STREETVIEW_DIR = os.path.join(self.ROOT_DIR, "streetviews")
 
         # Ensure output folders exist
         os.makedirs(self.VIEW_DIR, exist_ok=True)
@@ -27,7 +28,8 @@ class Config:
         os.makedirs(self.DEPTH_DIR, exist_ok=True)
         os.makedirs(self.MASK_DIR, exist_ok=True)
         os.makedirs(self.OUTPUT_DIR, exist_ok=True)
-
+        os.makedirs(self.STREETVIEW_DIR, exist_ok=True)
+        
         # Configure logging - every level INFO and DEBUG are logged
         logging.basicConfig(
             level=logging.INFO,  # DEBUG level captures DEBUG, INFO, WARNING, ERROR, CRITICAL
@@ -36,12 +38,7 @@ class Config:
                 logging.FileHandler(os.path.join(self.LOG_DIR, f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_pipeline.log")),
             ]
         )
-        
-        # Panorama CSV input
-        self.PANORAMA_CSV = os.path.join(self.ROOT_DIR, "streetviews/chandigarh_streets.csv")
-
-        # Output CSV
-        self.OUTPUT_CSV = os.path.join(self.OUTPUT_DIR, "chandigarh_trees.csv")
+        self.LOG_FILE = os.path.join(self.LOG_DIR, "pipeline.log")
 
         # Model config
         self.TREE_MODEL_PATH = os.path.join(
@@ -57,10 +54,6 @@ class Config:
             self.ROOT_DIR, "models", "CalibrateDepth", "weights", "random_forest.pkl"
         )
 
-        self.MASK_MODEL_PATH = os.path.join(
-            self.ROOT_DIR, "models", "MaskQuality", "weights", "best_overall.pt"
-        )
-
         self.DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.DEPTH_MODEL_CONFIGS = {
@@ -69,21 +62,25 @@ class Config:
             "vitl": {"encoder": "vitl", "features": 256, "out_channels": [256, 512, 1024, 1024]},
         }
 
-        # Other settings
+        ### EDITABLE SETTINGS ###
+        
+        # Panorama CSV input
+        self.PANORAMA_CSV = os.path.join(self.STREETVIEW_DIR, "chandigarh_streets.csv")
+
+        # Output CSV
+        self.OUTPUT_CSV = os.path.join(self.OUTPUT_DIR, "chandigarh_trees.csv")
+
+        # Max concurrent
+        self.MAX_CONCURRENT = 3
+
+        # Image settings
         self.FOV = 90
         self.WIDTH = 1024
         self.HEIGHT = 720
         self.BATCH_SIZE = 10
 
-        # Logging
-        self.LOG_FILE = os.path.join(self.LOG_DIR, "pipeline.log")
-
         # Save data
         self.SAVE_DEPTH_MAPS = False
         self.SAVE_MASK_JSON = False
-
-        # Optional: Cloud/DB/API keys
-        #self.CLOUD_STORAGE_BUCKET = os.getenv("CLOUD_STORAGE_BUCKET")
-        #self.CLOUD_URL = os.getenv("CLOUD_URL")
-        self.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-        self.DB_URL = os.getenv("DB_URL")
+        
+        ### END EDITABLE SETTINGS ###
