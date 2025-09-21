@@ -20,6 +20,8 @@ def parse_args() -> argparse.Namespace:
                         help="Save depth maps (default: False)")
     parser.add_argument("--save_mask_json", type=bool, default=False,
                         help="Save mask JSON (default: False)")
+    parser.add_argument("--max_concurrent", type=int, default=None,
+                        help="Maximum concurrent panoramas (auto-detected if not specified)")
     return parser.parse_args()
 
 

@@ -79,18 +79,27 @@ def process_view(config: Config, view, tree_data, pano, image, theta, i):
                     logger.debug(f"Processing tree {j}-{k} with confidence {conf:.3f}")
 
                     try:
-                        orig_point, pers_point = get_point(mask, theta, pano, config.HEIGHT, config.WIDTH, config.FOV)
+                        orig_point, _ = get_point(mask, theta, pano, config.HEIGHT, config.WIDTH, config.FOV)
+                        
                         # Get distance from depth map
                         W, H = image.shape[1], image.shape[0]
+                        u, v = orig_point[0], orig_point[1]
+
+                        # ignore detection of tree is at extremes length wise
+                        if u < 500 or u > W - 500 or v < 200 or v > H - 200:
+                            logger.warning(f"⚠️ Tree {j}-{k} is at extremes length wise")
+                            continue
                         
-                        distance_pano = get_depth_at_pixel(pano.depth, orig_point[0], orig_point[1], W, H, flipped=True)
+                        distance_pano = get_depth_at_pixel(pano.depth, u, v, W, H, flipped=True)
                         if distance_pano is None:
-                            logger.warning(f"⚠️ No depth map for {pano.id} at {orig_point[0]}, {orig_point[1]}")
+                            logger.warning(f"⚠️ No depth map for {pano.id} at {u}, {v}")
                             continue
                         if distance_pano > 15:
-                            logger.warning(f"⚠️ Distance too far for {pano.id} at {orig_point[0]}, {orig_point[1]}")
+                            logger.warning(f"⚠️ Distance too far for {pano.id} at {u}, {v}")
                             continue
-                        lat_pano, lon_pano = localize_pixel_with_depth(pano, orig_point[0], orig_point[1], W, H, distance_pano)
+                        
+                        # Create local frame for coordinate transformation
+                        lat_pano, lon_pano = localize_pixel_with_depth(pano, u, v, W, H, distance_pano)
 
                         # Use pano depth directly (no depth model)
                         distance_calibrated = distance_pano
@@ -116,8 +125,8 @@ def process_view(config: Config, view, tree_data, pano, image, theta, i):
                         "tree_lng_model": lon_model,
                         "tree_lat": lat_pano,
                         "tree_lng": lon_pano,
-                        "image_x": float(orig_point[0]),
-                        "image_y": float(orig_point[1]),
+                        "image_x": float(u),
+                        "image_y": float(v),
                         "theta": theta,
                         "conf": conf,
                         "distance_model": distance_calibrated,
