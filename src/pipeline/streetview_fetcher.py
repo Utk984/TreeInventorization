@@ -388,31 +388,25 @@ class StreetViewFetcher:
 
 
 class NeighborDiscovery:
-    """Fast neighbor discovery for existing panoramas with boundary checking."""
+    """Fast recursive neighbor discovery with maximum threading."""
     
-    def __init__(self, max_workers: int = 50, geojson_path: str = None, recursive: bool = False):
+    def __init__(self, geojson_path: str = None, max_workers: int = 100):
         """
         Initialize the neighbor discovery system.
         
         Args:
-            max_workers: Maximum number of concurrent workers
             geojson_path: Path to GeoJSON file for boundary checking
-            recursive: If True, recursively find neighbors of neighbors
+            max_workers: Maximum number of concurrent workers for speed
         """
-        self.max_workers = max_workers
         self.geojson_path = geojson_path
-        self.recursive = recursive
+        self.max_workers = max_workers
         self.boundary_polygons = []
         self.prepared_polygons = []
-        self.existing_pano_ids = set()
-        self.new_pano_ids = set()
-        self.processed_count = 0
-        self.new_neighbors_found = 0
-        self.batch_size = 100
+        self.all_pano_ids = set()  # Track all pano_ids we've seen
         
-    def load_existing_panoramas(self, csv_path: str) -> List[dict]:
-        """Load existing panoramas from CSV and create pano_id set."""
-        print(f"📁 Loading existing panoramas from {csv_path}...")
+    def load_panoramas(self, csv_path: str) -> List[dict]:
+        """Load panoramas from CSV file."""
+        print(f"📁 Loading panoramas from {csv_path}...")
         
         panoramas = []
         with open(csv_path, 'r', newline='', encoding='utf-8') as csvfile:
@@ -427,10 +421,9 @@ class NeighborDiscovery:
                     'lng': lng,
                     'pano_id': pano_id
                 })
-                self.existing_pano_ids.add(pano_id)
+                self.all_pano_ids.add(pano_id)
         
-        print(f"✅ Loaded {len(panoramas)} existing panoramas")
-        print(f"🎯 Unique pano_ids: {len(self.existing_pano_ids)}")
+        print(f"✅ Loaded {len(panoramas)} panoramas")
         return panoramas
     
     def load_boundary_polygons(self):
@@ -487,7 +480,7 @@ class NeighborDiscovery:
                 neighbor_lng = neighbor.lon
                 
                 # Skip if already exists
-                if neighbor_id in self.existing_pano_ids or neighbor_id in self.new_pano_ids:
+                if neighbor_id in self.all_pano_ids:
                     continue
                 
                 # Check if within boundary
@@ -499,7 +492,7 @@ class NeighborDiscovery:
                     'lng': neighbor_lng,
                     'pano_id': neighbor_id
                 })
-                self.new_pano_ids.add(neighbor_id)
+                self.all_pano_ids.add(neighbor_id)
             
             return valid_neighbors
             
@@ -507,53 +500,23 @@ class NeighborDiscovery:
             logger.debug(f"Failed to fetch neighbors for {pano_id}: {e}")
             return []
     
-    def save_incremental_neighbors(self, new_neighbors: List[dict], output_path: str):
-        """Save new neighbors incrementally to CSV."""
-        if not new_neighbors:
-            return
-        
-        # Append to CSV
-        with open(output_path, 'a', newline='', encoding='utf-8') as csvfile:
+    def save_to_csv(self, panoramas: List[dict], output_path: str):
+        """Save panoramas to CSV file."""
+        with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
             fieldnames = ['lat', 'lng', 'pano_id']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            
-            for neighbor in new_neighbors:
-                writer.writerow(neighbor)
-        
-        self.new_neighbors_found += len(new_neighbors)
-        print(f"💾 Saved {len(new_neighbors)} new neighbors (Total new: {self.new_neighbors_found})")
+            writer.writeheader()
+            writer.writerows(panoramas)
     
-    def _update_progress(self, success: bool = True, count: int = 1, total_panoramas: int = None):
-        """Update progress counters and display progress bar."""
-        self.processed_count += 1
-        
-        # Use dynamic total if provided, otherwise use existing count
-        if total_panoramas is None:
-            total_panoramas = len(self.existing_pano_ids)
-        
-        # Calculate progress percentage - cap at 100%
-        progress = min((self.processed_count / total_panoramas) * 100, 100.0) if total_panoramas > 0 else 0
-        
-        # Create progress bar
-        bar_length = 40
-        filled_length = min(int(bar_length * self.processed_count // total_panoramas), bar_length) if total_panoramas > 0 else 0
-        bar = '█' * filled_length + '░' * (bar_length - filled_length)
-        
-        # Display progress
-        print(f'\r🔍 Neighbor Discovery: |{bar}| {progress:.1f}% ({self.processed_count}/{total_panoramas}) ✅ {self.new_neighbors_found} new neighbors', end='', flush=True)
-        
-        # New line when complete
-        if self.processed_count >= total_panoramas:
-            print()  # New line when done
-    
+
     async def discover_neighbors(self, csv_path: str, output_path: str = None) -> List[dict]:
-        """Discover neighbors for all existing panoramas with parallel processing."""
+        """Ultra-fast recursive neighbor discovery - only processes NEW panoramas each iteration."""
         print(f"\n{'='*60}")
-        print(f"🔍 NEIGHBOR DISCOVERY STARTED")
+        print(f"🚀 ULTRA-FAST RECURSIVE NEIGHBOR DISCOVERY")
         print(f"{'='*60}")
         
         # Load existing panoramas
-        existing_panoramas = self.load_existing_panoramas(csv_path)
+        panoramas = self.load_panoramas(csv_path)
         
         # Load boundary polygons
         self.load_boundary_polygons()
@@ -562,127 +525,22 @@ class NeighborDiscovery:
         if output_path is None:
             output_path = csv_path.replace('.csv', '_with_neighbors.csv')
         
-        # Copy existing data to new file
-        print(f"📋 Copying existing data to {output_path}...")
-        with open(output_path, 'w', newline='', encoding='utf-8') as outfile:
-            fieldnames = ['lat', 'lng', 'pano_id']
-            writer = csv.DictWriter(outfile, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(existing_panoramas)
+        print(f"🚀 Starting with {len(panoramas)} panoramas...")
+        print(f"⚡ Using {self.max_workers} concurrent workers for maximum speed...")
         
-        print(f"🚀 Starting neighbor discovery with {self.max_workers} workers...")
-        print(f"📊 Processing {len(existing_panoramas)} existing panoramas...")
-        print(f"💾 Saving every {self.batch_size} new neighbors...")
-        
-        all_new_neighbors = []
-        batch_neighbors = []
-        
-        async with aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(
-                limit=100,
-                limit_per_host=50,
-                ttl_dns_cache=300,
-                use_dns_cache=True
-            ),
-            timeout=aiohttp.ClientTimeout(
-                total=30,
-                connect=10,
-                sock_read=10
-            )
-        ) as session:
-            # Create semaphore to limit concurrent requests
-            semaphore = asyncio.Semaphore(self.max_workers)
-            
-            async def fetch_with_semaphore(pano_id):
-                async with semaphore:
-                    neighbors = await self.fetch_neighbors_async(session, pano_id)
-                    self._update_progress(success=True, count=len(neighbors))
-                    return neighbors
-            
-            # Create tasks for all existing panoramas
-            tasks = [fetch_with_semaphore(pano['pano_id']) for pano in existing_panoramas]
-            
-            # Process in chunks for incremental saving
-            chunk_size = self.max_workers * 5
-            
-            for i in range(0, len(tasks), chunk_size):
-                chunk_tasks = tasks[i:i + chunk_size]
-                chunk_results = await asyncio.gather(*chunk_tasks, return_exceptions=True)
-                
-                # Process chunk results
-                for result in chunk_results:
-                    if isinstance(result, list):
-                        batch_neighbors.extend(result)
-                        all_new_neighbors.extend(result)
-                    elif isinstance(result, Exception):
-                        logger.debug(f"Task failed: {result}")
-                
-                # Save incrementally if we have enough new neighbors
-                if len(batch_neighbors) >= self.batch_size:
-                    self.save_incremental_neighbors(batch_neighbors, output_path)
-                    batch_neighbors = []
-        
-        # Save any remaining neighbors
-        if batch_neighbors:
-            self.save_incremental_neighbors(batch_neighbors, output_path)
-        
-        # Final statistics
-        print(f"\n📈 Neighbor Discovery Results:")
-        print(f"   🎯 Original Panoramas: {len(existing_panoramas)}")
-        print(f"   🔍 New Neighbors Found: {self.new_neighbors_found}")
-        print(f"   📊 Total Panoramas: {len(existing_panoramas) + self.new_neighbors_found}")
-        print(f"   📁 Output File: {output_path}")
-        
-        return all_new_neighbors
-
-    async def discover_neighbors_recursive(self, csv_path: str, output_path: str = None) -> List[dict]:
-        """Discover neighbors recursively - neighbors of neighbors until no new ones found."""
-        print(f"\n{'='*60}")
-        print(f"🔍 RECURSIVE NEIGHBOR DISCOVERY STARTED")
-        print(f"{'='*60}")
-        
-        # Load existing panoramas
-        existing_panoramas = self.load_existing_panoramas(csv_path)
-        
-        # Load boundary polygons
-        self.load_boundary_polygons()
-        
-        # Set output path
-        if output_path is None:
-            output_path = csv_path.replace('.csv', '_with_recursive_neighbors.csv')
-        
-        # Copy existing data to new file
-        print(f"📋 Copying existing data to {output_path}...")
-        with open(output_path, 'w', newline='', encoding='utf-8') as outfile:
-            fieldnames = ['lat', 'lng', 'pano_id']
-            writer = csv.DictWriter(outfile, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(existing_panoramas)
-        
-        # Initialize dynamic panorama list (starts with existing, grows as we find neighbors)
-        panorama_queue = existing_panoramas.copy()  # List to process in order
-        all_panoramas = existing_panoramas.copy()   # All panoramas we've seen
+        # Process panoramas until no new neighbors are found
+        all_panoramas = panoramas.copy()
         processed_pano_ids = set()  # Track which pano_ids we've already processed
+        iteration = 0
         
-        # Add existing pano_ids to processed set
-        for pano in existing_panoramas:
+        # Add initial panoramas to processed set
+        for pano in panoramas:
             processed_pano_ids.add(pano['pano_id'])
         
-        # Reset counters for recursive mode
-        self.processed_count = 0
-        self.new_neighbors_found = 0
-        
-        print(f"🚀 Starting recursive neighbor discovery with {self.max_workers} workers...")
-        print(f"📊 Starting with {len(existing_panoramas)} panoramas...")
-        print(f"💾 Saving every {self.batch_size} new neighbors...")
-        
-        all_new_neighbors = []
-        batch_neighbors = []
-        
         async with aiohttp.ClientSession(
             connector=aiohttp.TCPConnector(
-                limit=100,
-                limit_per_host=50,
+                limit=200,           # High connection pool
+                limit_per_host=100, # High per-host limit
                 ttl_dns_cache=300,
                 use_dns_cache=True
             ),
@@ -692,75 +550,82 @@ class NeighborDiscovery:
                 sock_read=10
             )
         ) as session:
-            # Create semaphore to limit concurrent requests
+            
+            # Create semaphore for concurrency control
             semaphore = asyncio.Semaphore(self.max_workers)
             
             async def fetch_with_semaphore(pano_id):
                 async with semaphore:
-                    neighbors = await self.fetch_neighbors_async(session, pano_id)
-                    return neighbors
+                    return await self.fetch_neighbors_async(session, pano_id)
             
-            # Process panoramas one by one, adding new neighbors to the queue
-            i = 0
-            while i < len(panorama_queue):
-                current_pano = panorama_queue[i]
-                current_pano_id = current_pano['pano_id']
+            while True:
+                iteration += 1
                 
-                # Skip if already processed
-                if current_pano_id in processed_pano_ids:
-                    i += 1
-                    continue
+                # Get ONLY NEW panoramas to process in this iteration
+                new_panoramas = [pano for pano in all_panoramas if pano['pano_id'] not in processed_pano_ids]
                 
-                # Mark as processed
-                processed_pano_ids.add(current_pano_id)
+                if not new_panoramas:
+                    print(f"   🎯 No new panoramas to process - stopping recursion")
+                    break
                 
-                # Fetch neighbors for current panorama
-                try:
-                    neighbors = await fetch_with_semaphore(current_pano_id)
+                print(f"\n🔄 Iteration {iteration} - Processing {len(new_panoramas)} NEW panoramas...")
+                print(f"   📊 Total panoramas so far: {len(all_panoramas)}")
+                
+                new_neighbors_found = 0
+                
+                # Process in parallel batches for maximum speed
+                batch_size = self.max_workers * 2
+                
+                for i in range(0, len(new_panoramas), batch_size):
+                    batch = new_panoramas[i:i + batch_size]
                     
-                    # Add new neighbors to queue and all_panoramas
-                    for neighbor in neighbors:
-                        neighbor_id = neighbor['pano_id']
+                    # Create tasks for this batch
+                    tasks = [fetch_with_semaphore(pano['pano_id']) for pano in batch]
+                    
+                    # Execute batch in parallel
+                    batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+                    
+                    # Process results
+                    for j, result in enumerate(batch_results):
+                        pano_id = batch[j]['pano_id']
+                        processed_pano_ids.add(pano_id)  # Mark as processed
                         
-                        # Add to queue if not already processed
-                        if neighbor_id not in processed_pano_ids:
-                            panorama_queue.append(neighbor)
-                            all_panoramas.append(neighbor)
-                            batch_neighbors.append(neighbor)
-                            all_new_neighbors.append(neighbor)
-                            self.new_pano_ids.add(neighbor_id)
+                        if isinstance(result, list):
+                            for neighbor in result:
+                                all_panoramas.append(neighbor)
+                                new_neighbors_found += 1
+                        elif isinstance(result, Exception):
+                            logger.debug(f"Task failed for {pano_id}: {result}")
                     
-                    # Update progress with dynamic total
-                    self._update_progress(success=True, count=len(neighbors), total_panoramas=len(panorama_queue))
-                    
-                    # Save incrementally if we have enough new neighbors
-                    if len(batch_neighbors) >= self.batch_size:
-                        self.save_incremental_neighbors(batch_neighbors, output_path)
-                        batch_neighbors = []
+                    # Show progress
+                    if (i + batch_size) % (batch_size * 5) == 0 or i + batch_size >= len(new_panoramas):
+                        print(f"   🔄 Processed {min(i + batch_size, len(new_panoramas))}/{len(new_panoramas)} | Total: {len(all_panoramas)}")
                 
-                except Exception as e:
-                    logger.debug(f"Failed to process {current_pano_id}: {e}")
-                    self._update_progress(success=False, count=0, total_panoramas=len(panorama_queue))
+                print(f"   ✅ Found {new_neighbors_found} new neighbors in iteration {iteration}")
                 
-                i += 1
+                # If no new neighbors found, we're done
+                if new_neighbors_found == 0:
+                    print(f"   🎯 No new neighbors found - stopping recursion")
+                    break
         
-        # Save any remaining neighbors
-        if batch_neighbors:
-            self.save_incremental_neighbors(batch_neighbors, output_path)
+        # Save all panoramas to CSV
+        print(f"\n💾 Saving {len(all_panoramas)} panoramas to {output_path}...")
+        self.save_to_csv(all_panoramas, output_path)
         
         # Final statistics
-        print(f"\n📈 Recursive Neighbor Discovery Results:")
-        print(f"   🎯 Original Panoramas: {len(existing_panoramas)}")
-        print(f"   🔍 New Neighbors Found: {self.new_neighbors_found}")
+        total_new_neighbors = len(all_panoramas) - len(panoramas)
+        print(f"\n📈 Results:")
+        print(f"   🎯 Original Panoramas: {len(panoramas)}")
+        print(f"   🔍 Total New Neighbors Found: {total_new_neighbors}")
         print(f"   📊 Total Panoramas: {len(all_panoramas)}")
-        print(f"   🔄 Panoramas Processed: {len(processed_pano_ids)}")
+        print(f"   🔄 Iterations: {iteration}")
         print(f"   📁 Output File: {output_path}")
         
-        return all_new_neighbors
+        return all_panoramas
 
 
 async def main_neighbor_discovery():
-    """Discover neighbors for existing South Delhi panoramas."""
+    """Ultra-fast recursive neighbor discovery."""
     
     # File paths
     csv_path = "streetviews/south_delhi.csv"
@@ -772,97 +637,19 @@ async def main_neighbor_discovery():
         print(f"❌ Error: CSV file not found at {csv_path}")
         return
     
-    # Create neighbor discovery with fast settings
-    discovery = NeighborDiscovery(
-        max_workers=50,  # High concurrency for speed
-        geojson_path=geojson_path
-    )
-    
-    try:
-        # Discover neighbors
-        new_neighbors = await discovery.discover_neighbors(
-            csv_path=csv_path,
-            output_path=output_path
-        )
-        
-        print(f"\n{'='*60}")
-        print(f"🎉 NEIGHBOR DISCOVERY COMPLETED!")
-        print(f"📊 Found {len(new_neighbors)} new neighbors")
-        print(f"📁 Results saved to {output_path}")
-        print(f"{'='*60}")
-        
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        return
-
-async def main_neighbor_discovery_unique():
-    """Discover neighbors for unique South Delhi panoramas only."""
-    
-    # File paths
-    csv_path = "streetviews/south_delhi_unique.csv"
-    geojson_path = "streetviews/South Delhi.geojson"
-    output_path = "streetviews/south_delhi_unique_with_neighbors.csv"
-    
-    # Check if CSV exists
-    if not Path(csv_path).exists():
-        print(f"❌ Error: CSV file not found at {csv_path}")
-        print("💡 Run the unique CSV creation first!")
-        return
-    
-    # Create neighbor discovery with fast settings
-    discovery = NeighborDiscovery(
-        max_workers=50,  # High concurrency for speed
-        geojson_path=geojson_path
-    )
-    
-    try:
-        # Discover neighbors
-        new_neighbors = await discovery.discover_neighbors(
-            csv_path=csv_path,
-            output_path=output_path
-        )
-        
-        print(f"\n{'='*60}")
-        print(f"🎉 NEIGHBOR DISCOVERY COMPLETED!")
-        print(f"📊 Found {len(new_neighbors)} new neighbors")
-        print(f"📁 Results saved to {output_path}")
-        print(f"{'='*60}")
-        
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        return
-
-async def main_neighbor_discovery_recursive():
-    """Discover neighbors recursively for unique South Delhi panoramas."""
-    
-    # File paths
-    csv_path = "streetviews/south_delhi_unique.csv"
-    geojson_path = "streetviews/South Delhi.geojson"
-    output_path = "streetviews/south_delhi_unique_with_recursive_neighbors.csv"
-    
-    # Check if CSV exists
-    if not Path(csv_path).exists():
-        print(f"❌ Error: CSV file not found at {csv_path}")
-        print("💡 Run the unique CSV creation first!")
-        return
-    
-    # Create neighbor discovery with recursive mode
-    discovery = NeighborDiscovery(
-        max_workers=50,  # High concurrency for speed
-        geojson_path=geojson_path,
-        recursive=True
-    )
+    # Create ultra-fast neighbor discovery
+    discovery = NeighborDiscovery(geojson_path=geojson_path, max_workers=100)
     
     try:
         # Discover neighbors recursively
-        new_neighbors = await discovery.discover_neighbors_recursive(
+        all_panoramas = await discovery.discover_neighbors(
             csv_path=csv_path,
             output_path=output_path
         )
         
         print(f"\n{'='*60}")
-        print(f"🎉 RECURSIVE NEIGHBOR DISCOVERY COMPLETED!")
-        print(f"📊 Found {len(new_neighbors)} new neighbors")
+        print(f"🎉 ULTRA-FAST NEIGHBOR DISCOVERY COMPLETED!")
+        print(f"📊 Total panoramas: {len(all_panoramas)}")
         print(f"📁 Results saved to {output_path}")
         print(f"{'='*60}")
         
@@ -904,14 +691,8 @@ if __name__ == "__main__":
     
     # Check command line arguments
     if len(sys.argv) > 1 and sys.argv[1] == "neighbors":
-        print("🔍 Running Neighbor Discovery Mode...")
+        print("🚀 Running Ultra-Fast Recursive Neighbor Discovery...")
         asyncio.run(main_neighbor_discovery())
-    elif len(sys.argv) > 1 and sys.argv[1] == "neighbors-unique":
-        print("🔍 Running Neighbor Discovery Mode (Unique Only)...")
-        asyncio.run(main_neighbor_discovery_unique())
-    elif len(sys.argv) > 1 and sys.argv[1] == "neighbors-recursive":
-        print("🔄 Running Recursive Neighbor Discovery Mode...")
-        asyncio.run(main_neighbor_discovery_recursive())
     else:
         print("🚀 Running Street View Fetch Mode...")
         asyncio.run(main())

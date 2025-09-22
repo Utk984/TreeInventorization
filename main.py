@@ -1,6 +1,6 @@
 import logging
 import time
-from src.pipeline.pano_parallel import process_panoramas_parallel
+from src.pipeline.pano_parallel import process_panoramas_streaming
 from config import Config
 from ultralytics import YOLO
 import asyncio
@@ -38,16 +38,16 @@ def main():
         
         # Calculate optimal concurrency based on system resources
         try:
-            optimal_concurrent = calculate_optimal_concurrency()
+            optimal_concurrent = calculate_optimal_concurrency() + 4
             logger.info(f"🔧 Auto-calculated optimal concurrency: {optimal_concurrent}")
         except Exception as e:
             logger.error(f"💥 Failed to calculate optimal concurrency: {str(e)}")
             optimal_concurrent = config.MAX_CONCURRENT
             logger.info(f"🔧 Using user-specified concurrency: {optimal_concurrent}")
         
-        # Run parallel pipeline
-        logger.info("🔄 Starting parallel panorama processing pipeline")
-        asyncio.run(process_panoramas_parallel(config, tree_model, max_concurrent=optimal_concurrent))
+        # Run streaming pipeline
+        logger.info("🔄 Starting streaming panorama processing pipeline")
+        asyncio.run(process_panoramas_streaming(config, tree_model, max_concurrent=optimal_concurrent, chunk_size=optimal_concurrent))
         
         total_time = time.time() - pipeline_start_time
         logger.info("=" * 60)

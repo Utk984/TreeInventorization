@@ -65,10 +65,10 @@ class Config:
         ### EDITABLE SETTINGS ###
         
         # Panorama CSV input
-        self.PANORAMA_CSV = os.path.join(self.STREETVIEW_DIR, "chandigarh_streets.csv")
+        self.PANORAMA_CSV = os.path.join(self.STREETVIEW_DIR, "south_delhi.csv")
 
         # Output CSV
-        self.OUTPUT_CSV = os.path.join(self.OUTPUT_DIR, "chandigarh_trees.csv")
+        self.OUTPUT_CSV = os.path.join(self.OUTPUT_DIR, "south_delhi_trees.csv")
 
         # Max concurrent
         self.MAX_CONCURRENT = 3
@@ -81,6 +81,6 @@ class Config:
 
         # Save data
         self.SAVE_DEPTH_MAPS = False
-        self.SAVE_MASK_JSON = False
+        self.SAVE_MASK_JSON = True
         
         ### END EDITABLE SETTINGS ###

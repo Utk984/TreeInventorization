@@ -35,6 +35,7 @@ show_usage() {
     echo "  --pipeline    Run the tree detection pipeline (main.py)"
     echo "  --eval        Run evaluation against ground truth (eval/eval.py)"
     echo "  --plot        Run interactive plotting (src/utils/plot.py)"
+    echo "  --view3d      Run 3D panorama viewer with tree detection visualization"
     echo ""
     echo "Additional arguments are passed through to the respective Python scripts."
     echo ""
@@ -42,6 +43,7 @@ show_usage() {
     echo "  $0 --pipeline --input_csv ./streetviews/test.csv --output_csv ./outputs/test_trees.csv"
     echo "  $0 --eval ./outputs/my_predictions.csv"
     echo "  $0 --plot"
+    echo "  $0 --view3d --tree-csv outputs/chandigarh_trees.csv"
     echo ""
     echo "Pipeline arguments (main.py):"
     echo "  --input_csv, -i     Path to panorama ID CSV (default: ./streetviews/chandigarh_streets.csv)"
@@ -59,9 +61,15 @@ show_usage() {
     echo "  --tree-csv              Path to tree data CSV (default: outputs/tree_data.csv)"
     echo "  --streetview-csv        Path to street view CSV (default: streetviews/chandigarh_streets.csv)"
     echo "  --data-dir              Data directory path (default: data)"
-    echo "  --server-url            Server URL for images (default: http://localhost:8000)"
     echo "  --distance-threshold    Distance threshold for duplicate removal in meters (default: 3.0)"
     echo "  --port                  Port to serve the map (default: 5000)"
+    echo ""
+    echo "3D Viewer arguments (run_3d_viewer.sh):"
+    echo "  --tree-csv              Path to tree detection CSV file (default: outputs/chandigarh_trees.csv)"
+    echo "  --streetview-csv        Path to street view CSV file (default: streetviews/chandigarh_streets.csv)"
+    echo "  --data-dir              Data directory path (default: data)"
+    echo "  --port                  Port to serve the viewer (default: 5002)"
+    echo "  --host                  Host to bind to (default: 0.0.0.0)"
 }
 
 # Function to check Python dependencies
@@ -148,36 +156,12 @@ run_plot() {
         fi
     fi
     
-    # Start data server in background if plotting
-    print_status "Starting data server for image serving..."
-    cd data
-    python3 -m http.server 8000 &
-    SERVER_PID=$!
-    cd - > /dev/null
-    
-    # Wait a moment for server to start
-    sleep 2
-    
-    # Check if server is running
-    if ! kill -0 $SERVER_PID 2>/dev/null; then
-        print_error "Failed to start data server"
-        exit 1
-    fi
-    
-    print_success "Data server started (PID: $SERVER_PID)"
-    print_status "Server URL: http://localhost:8000"
-    
     # Run the plotting script
     python3 src/utils/plot.py "$@"
     PLOT_EXIT_CODE=$?
     
-    # Clean up server
-    kill $SERVER_PID 2>/dev/null
-    print_status "Stopped data server (PID: $SERVER_PID)"
-    
     if [ $PLOT_EXIT_CODE -eq 0 ]; then
         print_success "Plotting completed successfully!"
-        print_status "Interactive map should be available at http://localhost:5000"
     else
         print_error "Plotting failed with exit code: $PLOT_EXIT_CODE"
         exit 1
@@ -207,6 +191,11 @@ case "$1" in
         shift  # Remove --plot from arguments
         check_dependencies
         run_plot "$@"
+        ;;
+    --view3d)
+        shift  # Remove --view3d from arguments
+        print_status "Starting 3D panorama viewer..."
+        python run_3d_viewer_fixed.py "$@"
         ;;
     --help|-h)
         show_usage
