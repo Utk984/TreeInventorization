@@ -11,7 +11,7 @@ from src.pipeline.processor import process_single_panorama, IO_EXECUTOR
 
 logger = logging.getLogger(__name__)
 
-async def process_panoramas_streaming(config: Config, tree_model, max_concurrent=3, chunk_size=15):
+async def inventorize(config: Config, tree_model, max_concurrent=3, chunk_size=15):
     """Simple fetch 15, process 15, repeat pipeline."""
     logger.info("🚀 Starting simple fetch-process pipeline")
     pipeline_start_time = time.time()
@@ -126,8 +126,3 @@ async def process_panoramas_streaming(config: Config, tree_model, max_concurrent
         logger.error(f"💥 Pipeline failed with error: {str(e)}")
         logger.exception("Full traceback:")
         raise
-
-# Keep the old function for backward compatibility
-async def process_panoramas(config: Config, tree_model, max_concurrent=3):
-    """Legacy function - redirects to streaming version."""
-    return await process_panoramas_streaming(config, tree_model, max_concurrent, chunk_size=100)

@@ -1,6 +1,6 @@
 import logging
 import time
-from src.pipeline.pano_parallel import process_panoramas_streaming
+from src.pipeline.inventorize import inventorize
 from config import Config
 from ultralytics import YOLO
 import asyncio
@@ -47,7 +47,7 @@ def main():
         
         # Run streaming pipeline
         logger.info("🔄 Starting streaming panorama processing pipeline")
-        asyncio.run(process_panoramas_streaming(config, tree_model, max_concurrent=optimal_concurrent, chunk_size=optimal_concurrent))
+        asyncio.run(inventorize(config, tree_model, max_concurrent=optimal_concurrent, chunk_size=optimal_concurrent))
         
         total_time = time.time() - pipeline_start_time
         logger.info("=" * 60)
