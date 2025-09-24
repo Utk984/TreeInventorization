@@ -1,13 +1,10 @@
 import logging
 import time
-from cli import parse_args, build_config
-from src.pipeline.pano_parallel import process_panoramas_parallel
-from models.CalibrateDepth.model import DepthCalibrator
+from src.pipeline.inventorize import inventorize
 from config import Config
-import torch
 from ultralytics import YOLO
 import asyncio
-from src.utils.system_resources import get_safe_concurrency_estimate
+from src.utils.system_resources import calculate_optimal_concurrency
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +13,7 @@ def load_models(config: Config):
     logger.info("Starting model loading process")
     
     try:
-        # Load tree segmentation model
+        # Load tree segmentation model from config
         logger.info(f"Loading tree segmentation model from: {config.TREE_MODEL_PATH}")
         tree_model = YOLO(config.TREE_MODEL_PATH)
         logger.info("✅ Tree segmentation model loaded successfully")
@@ -34,33 +31,23 @@ def main():
     logger.info("=" * 60)
     
     try:
-        # Parse arguments and build configuration
-        logger.info("Parsing command line arguments")
-        args = parse_args()
-        logger.info(f"Arguments parsed: {vars(args)}")
-        
-        logger.info("Building configuration")
-        config = build_config(args)
-        logger.info(f"Configuration built successfully")
-        logger.info(f"Input CSV: {config.PANORAMA_CSV}")
-        logger.info(f"Output CSV: {config.OUTPUT_CSV}")
-        logger.info(f"View directory: {config.VIEW_DIR}")
-        logger.info(f"Full directory: {config.FULL_DIR}")
+        config = Config()
         
         # Load models
         tree_model = load_models(config)
         
         # Calculate optimal concurrency based on system resources
-        if args.max_concurrent is not None:
-            optimal_concurrent = args.max_concurrent
-            logger.info(f"🔧 Using user-specified concurrency: {optimal_concurrent}")
-        else:
-            optimal_concurrent = get_safe_concurrency_estimate()
+        try:
+            optimal_concurrent = calculate_optimal_concurrency() + 4
             logger.info(f"🔧 Auto-calculated optimal concurrency: {optimal_concurrent}")
+        except Exception as e:
+            logger.error(f"💥 Failed to calculate optimal concurrency: {str(e)}")
+            optimal_concurrent = config.MAX_CONCURRENT
+            logger.info(f"🔧 Using user-specified concurrency: {optimal_concurrent}")
         
-        # Run parallel pipeline
-        logger.info("🔄 Starting parallel panorama processing pipeline")
-        asyncio.run(process_panoramas_parallel(config, tree_model, max_concurrent=optimal_concurrent))
+        # Run streaming pipeline
+        logger.info("🔄 Starting streaming panorama processing pipeline")
+        asyncio.run(inventorize(config, tree_model, max_concurrent=optimal_concurrent, chunk_size=optimal_concurrent))
         
         total_time = time.time() - pipeline_start_time
         logger.info("=" * 60)
