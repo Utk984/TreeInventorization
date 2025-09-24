@@ -1,5 +1,5 @@
 import pandas as pd
-import folium
+import pydeck as pdk
 import numpy as np
 from geopy.distance import geodesic
 import os
@@ -14,14 +14,20 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'
 from config import Config
 
 class TreeStreetViewPlotter:
-    """Main class for plotting trees and street views."""
+    """Main class for plotting trees and street views using Deck.gl."""
     
-    def __init__(self):
-        """Initialize the plotter."""
+    def __init__(self, show_connections: bool = True):
+        """Initialize the plotter.
+        
+        Args:
+            show_connections: Whether to show connection lines between trees and street views
+        """
         self.config = Config()
         self.tree_data = None
         self.streetview_data = None
         self.cleaned_tree_data = None
+        self.show_connections = show_connections
+        self.deck = None
 
     def load_data(self):
         """Load tree and street view data from CSV files."""
@@ -30,16 +36,12 @@ class TreeStreetViewPlotter:
         # keep the rows where distance_pano < 12
         self.tree_data = self.tree_data[self.tree_data['distance_pano'] < 12]
         
-        # Load all street view data first
-        all_streetview_data = pd.read_csv(self.config.PANORAMA_CSV)
-        
-        # Filter street view data to only include panorama IDs that have trees
-        tree_pano_ids = set(self.tree_data['pano_id'].unique())
-        self.streetview_data = all_streetview_data[all_streetview_data['pano_id'].isin(tree_pano_ids)]
+        # Load all street view data
+        self.streetview_data = pd.read_csv(self.config.PANORAMA_CSV)
         
         print(f"Loaded {len(self.tree_data)} tree records")
-        print(f"Loaded {len(self.streetview_data)} street view records (filtered from {len(all_streetview_data)} total)")
-        print(f"Tree data covers {len(tree_pano_ids)} unique panorama IDs")
+        print(f"Loaded {len(self.streetview_data)} street view records")
+        print(f"Tree data covers {len(set(self.tree_data['pano_id'].unique()))} unique panorama IDs")
 
     def remove_duplicate_trees(self, distance_threshold: float = 3.0) -> pd.DataFrame:
         """
@@ -62,7 +64,6 @@ class TreeStreetViewPlotter:
         
         # Use spatial clustering for efficient deduplication
         from sklearn.cluster import DBSCAN
-        from sklearn.metrics import pairwise_distances
         import numpy as np
         
         # Convert to numpy array for efficient processing
@@ -103,183 +104,276 @@ class TreeStreetViewPlotter:
         
         return self.cleaned_tree_data
     
-    def create_popup(self, title: str) -> str:
-        """
-        Create simple text popup content.
+    def _prepare_tree_data(self) -> pd.DataFrame:
+        """Prepare tree data for Deck.gl ScatterplotLayer - optimized."""
+        print("Preparing tree data...")
         
-        Args:
-            title: Title for the popup
-            
-        Returns:
-            HTML string for popup
-        """
-        return f"<div style='text-align: center;'><h4>{title}</h4></div>"
+        # Filter valid coordinates
+        valid_trees = self.cleaned_tree_data.dropna(subset=['tree_lat', 'tree_lng']).copy()
+        
+        # Add color and size for trees using vectorized operations
+        valid_trees['color'] = [[34, 139, 34, 200]] * len(valid_trees)  # Forest green with transparency
+        valid_trees['radius'] = 1  # Small tree marker size
+        
+        # Select and rename columns efficiently
+        result = valid_trees[['tree_lng', 'tree_lat', 'color', 'radius', 'pano_id']].rename(columns={
+            'tree_lng': 'lon', 
+            'tree_lat': 'lat'
+        })
+        
+        print(f"Prepared {len(result)} tree markers")
+        return result
     
-    def create_map(self) -> folium.Map:
+    def _prepare_streetview_data(self) -> pd.DataFrame:
+        """Prepare street view data for Deck.gl ScatterplotLayer - optimized."""
+        print("Preparing street view data...")
+        
+        # Filter valid coordinates
+        valid_streetviews = self.streetview_data.dropna(subset=['lat', 'lng']).copy()
+        
+        # Add color and size for street views using vectorized operations
+        valid_streetviews['color'] = [[30, 144, 255, 200]] * len(valid_streetviews)  # Dodger blue with transparency
+        valid_streetviews['radius'] = 1  # Very small street view marker size
+        
+        # Select and rename columns efficiently
+        result = valid_streetviews[['lng', 'lat', 'color', 'radius', 'pano_id']].rename(columns={
+            'lng': 'lon'
+        })
+        
+        print(f"Prepared {len(result)} street view markers")
+        return result
+    
+    def _prepare_connection_data(self) -> pd.DataFrame:
+        """Prepare connection data for Deck.gl LineLayer - optimized for large datasets."""
+        if not self.show_connections:
+            return pd.DataFrame()
+        
+        print("Preparing connection data (this may take a moment for large datasets)...")
+        
+        # Use pandas merge for efficient joining instead of loops
+        # First, get streetview coordinates for each pano_id
+        sv_coords = self.streetview_data[['pano_id', 'lat', 'lng']].rename(columns={
+            'lat': 'source_lat', 
+            'lng': 'source_lon'
+        })
+        
+        # Merge tree data with streetview coordinates
+        tree_with_sv = self.cleaned_tree_data.merge(sv_coords, on='pano_id', how='inner')
+        
+        # Filter out rows with missing coordinates
+        valid_connections = tree_with_sv.dropna(subset=['tree_lat', 'tree_lng', 'source_lat', 'source_lon'])
+        
+        # Select and rename columns for Deck.gl LineLayer
+        connections_df = valid_connections[[
+            'source_lon', 'source_lat', 'tree_lng', 'tree_lat', 'pano_id'
+        ]].rename(columns={
+            'tree_lng': 'target_lon',
+            'tree_lat': 'target_lat'
+        })
+        
+        print(f"Prepared {len(connections_df)} connection lines")
+        return connections_df
+    
+    def create_map(self) -> pdk.Deck:
         """
-        Create the interactive map with trees, street views, and connections.
+        Create the interactive map with trees, street views, and connections using Deck.gl.
         
         Returns:
-            folium.Map object
+            pdk.Deck object
         """
-        print("Creating interactive map...")
+        print("Creating Deck.gl map...")
         
-        # Calculate center point
-        all_lats = list(self.cleaned_tree_data['tree_lat']) + list(self.streetview_data['lat'])
-        all_lngs = list(self.cleaned_tree_data['tree_lng']) + list(self.streetview_data['lng'])
+        # Prepare data for each layer with progress tracking
+        print("Step 1/4: Preparing data layers...")
+        tree_data = self._prepare_tree_data()
+        streetview_data = self._prepare_streetview_data()
+        connection_data = self._prepare_connection_data()
+        
+        print("Step 2/4: Calculating map bounds and zoom...")
+        
+        # Calculate center point and bounds
+        all_lats = list(tree_data['lat']) + list(streetview_data['lat'])
+        all_lons = list(tree_data['lon']) + list(streetview_data['lon'])
         
         center_lat = np.mean(all_lats)
-        center_lng = np.mean(all_lngs)
+        center_lon = np.mean(all_lons)
         
-        # Create map
-        m = folium.Map(
-            location=[center_lat, center_lng],
-            zoom_start=15,
-            tiles='OpenStreetMap',
-            width='100%',
-            height='100%',
-            max_zoom=25,
+        # Calculate zoom level based on data bounds
+        lat_range = max(all_lats) - min(all_lats)
+        lon_range = max(all_lons) - min(all_lons)
+        max_range = max(lat_range, lon_range)
+        
+        # Estimate zoom level (rough approximation)
+        if max_range > 1:
+            zoom = 8
+        elif max_range > 0.1:
+            zoom = 11
+        elif max_range > 0.01:
+            zoom = 14
+        else:
+            zoom = 16
+        
+        print(f"Map center: ({center_lat:.6f}, {center_lon:.6f}), zoom: {zoom}")
+        
+        # Store for use in save_map
+        self.center_lat = center_lat
+        self.center_lon = center_lon
+        self.zoom = zoom
+        
+        print("Step 3/4: Creating Deck.gl layers...")
+        
+        # Define layers with proper visibility controls
+        layers = []
+        
+        # OpenStreetMap base layer (more reliable)
+        # tile_layer = pdk.Layer(
+        #     "TileLayer",
+        #     data={
+        #         "tileSize": 256,
+        #         "minZoom": 0,
+        #         "maxZoom": 19,
+        #         "tiles": ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        #     },
+        # )
+        # layers.append(tile_layer)
+        esri_layer = pdk.Layer(
+            "TileLayer",
+            data={
+                "tileSize": 256,
+                "minZoom": 0,
+                "maxZoom": 19,
+                "tiles": [
+                    "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                ],
+            },
+            id="esri-imagery",
+        )
+        layers.append(esri_layer)
+        
+        # Connection lines layer (drawn first, so it appears below markers)
+        if self.show_connections and len(connection_data) > 0:
+            connection_layer = pdk.Layer(
+                "LineLayer",
+                connection_data,
+                id="connections",
+                get_source_position=["source_lon", "source_lat"],
+                get_target_position=["target_lon", "target_lat"],
+                get_color=[255, 69, 0, 100],  # Orange red with transparency
+                get_width=0.5,  # Thinner lines
+                pickable=True,
+                auto_highlight=True,
+                visible=True
+            )
+            layers.append(connection_layer)
+        
+        # Street view markers layer
+        if len(streetview_data) > 0:
+            streetview_layer = pdk.Layer(
+                "ScatterplotLayer",
+                streetview_data,
+                id="streetviews",
+                get_position=["lon", "lat"],
+                get_color="color",
+                get_radius="radius",
+                radius_min_pixels=1,
+                radius_max_pixels=10,
+                pickable=True,
+                auto_highlight=True,
+                visible=True
+            )
+            layers.append(streetview_layer)
+        
+        # Tree markers layer (drawn last, so it appears on top)
+        if len(tree_data) > 0:
+            tree_layer = pdk.Layer(
+                "ScatterplotLayer",
+                tree_data,
+                id="trees",
+                get_position=["lon", "lat"],
+                get_color="color",
+                get_radius="radius",
+                radius_min_pixels=1,
+                radius_max_pixels=15,
+                pickable=True,
+                auto_highlight=True,
+                visible=True
+            )
+            layers.append(tree_layer)
+        
+        print("Step 4/4: Assembling final Deck.gl map...")
+        
+        # Create the deck
+        self.deck = pdk.Deck(
+            layers=layers,
+            initial_view_state=pdk.ViewState(
+                latitude=center_lat,
+                longitude=center_lon,
+                zoom=zoom,
+                pitch=0,
+                bearing=0
+            ),
+            map_provider="carto",  # or "mapbox"
+            map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+            tooltip={
+                "html": """
+                <b>Location:</b> {lat:.6f}, {lon:.6f}<br/>
+                <b>Panorama ID:</b> {pano_id}
+                """,
+                "style": {
+                    "backgroundColor": "steelblue",
+                    "color": "white",
+                    "fontSize": "12px",
+                    "padding": "8px",
+                    "borderRadius": "4px"
+                }
+            }
         )
         
-        # Add tree markers
-        print("Adding tree markers...")
-        for _, row in self.cleaned_tree_data.iterrows():
-            if pd.notna(row['tree_lat']) and pd.notna(row['tree_lng']):
-                # Create simple popup
-                popup_html = self.create_popup(f"Tree at ({row['tree_lat']:.6f}, {row['tree_lng']:.6f})")
-                
-                folium.CircleMarker(
-                    [row['tree_lat'], row['tree_lng']],
-                    popup=folium.Popup(popup_html, max_width=200),
-                    radius=0.2,
-                    color='green',
-                    fill=True,
-                    fillColor='green',
-                    fillOpacity=0.8
-                ).add_to(m)
-        
-        # Add street view markers
-        print("Adding street view markers...")
-        for _, row in self.streetview_data.iterrows():
-            if pd.notna(row['lat']) and pd.notna(row['lng']):
-                # Create simple popup
-                popup_html = self.create_popup(f"Street View at ({row['lat']:.6f}, {row['lng']:.6f})")
-                
-                folium.CircleMarker(
-                    [row['lat'], row['lng']],
-                    popup=folium.Popup(popup_html, max_width=200),
-                    radius=0.2,
-                    color='blue',
-                    fill=True,
-                    fillColor='blue',
-                    fillOpacity=0.8
-                ).add_to(m)
-        
-        # Add connection lines between trees and street views
-        print("Adding connection lines...")
-        self._add_connection_lines(m)
-        
-        # Add legend
-        self._add_legend(m)
-        
-        return m
-    
-    def _add_connection_lines(self, map_obj: folium.Map):
-        """Add lines connecting trees to their corresponding street views (edge-to-edge)."""
-        # Group trees by pano_id
-        tree_groups = self.cleaned_tree_data.groupby('pano_id')
-        
-        for pano_id, tree_group in tree_groups:
-            # Find corresponding street view
-            streetview = self.streetview_data[self.streetview_data['pano_id'] == pano_id]
-            
-            if len(streetview) > 0:
-                sv_lat = streetview.iloc[0]['lat']
-                sv_lng = streetview.iloc[0]['lng']
-                
-                # Draw lines from street view to each tree (edge-to-edge)
-                for _, tree in tree_group.iterrows():
-                    if pd.notna(tree['tree_lat']) and pd.notna(tree['tree_lng']):
-                        # Calculate edge-to-edge connection
-                        start_point, end_point = self._calculate_edge_points(
-                            sv_lat, sv_lng, tree['tree_lat'], tree['tree_lng']
-                        )
-                        
-                        folium.PolyLine(
-                            locations=[start_point, end_point],
-                            color='red',
-                            weight=1,
-                            opacity=0.6,
-                            popup=f"Connection: {pano_id}"
-                        ).add_to(map_obj)
-    
-    def _calculate_edge_points(self, lat1: float, lng1: float, lat2: float, lng2: float):
-        """Calculate edge-to-edge connection points between two markers."""
-        # Marker radius in degrees (approximate conversion from 0.2 radius)
-        marker_radius_deg = 0.000002  # Rough conversion for 0.2 radius
-        
-        # Calculate bearing (direction) from point 1 to point 2
-        lat1_rad = np.radians(lat1)
-        lat2_rad = np.radians(lat2)
-        d_lng = np.radians(lng2 - lng1)
-        
-        y = np.sin(d_lng) * np.cos(lat2_rad)
-        x = np.cos(lat1_rad) * np.sin(lat2_rad) - np.sin(lat1_rad) * np.cos(lat2_rad) * np.cos(d_lng)
-        bearing = np.arctan2(y, x)
-        
-        # Calculate edge points
-        # For point 1 (street view), extend towards point 2
-        start_lat = lat1 + marker_radius_deg * np.cos(bearing)
-        start_lng = lng1 + marker_radius_deg * np.sin(bearing) / np.cos(np.radians(lat1))
-        
-        # For point 2 (tree), extend towards point 1
-        end_lat = lat2 - marker_radius_deg * np.cos(bearing)
-        end_lng = lng2 - marker_radius_deg * np.sin(bearing) / np.cos(np.radians(lat2))
-        
-        return [start_lat, start_lng], [end_lat, end_lng]
-    
-    def _add_legend(self, map_obj: folium.Map):
-        """Add legend to the map."""
-        legend_html = '''
-        <div style="position: absolute; 
-                    bottom: 10px; right: 10px; width: 140px; height: 80px; 
-                    background-color: white; border:2px solid grey; z-index:1000; 
-                    font-size:12px; padding: 8px; border-radius: 5px;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
-        <p style="margin: 0 0 5px 0; font-weight: bold;">Legend</p>
-        <p style="margin: 2px 0;"><span style="color:green">●</span> Trees</p>
-        <p style="margin: 2px 0;"><span style="color:blue">●</span> Street Views</p>
-        <p style="margin: 2px 0;"><span style="color:red">━</span> Connections</p>
-        </div>
-        '''
-        map_obj.get_root().html.add_child(folium.Element(legend_html))
-    
-    def get_map_html(self) -> str:
-        """Get the map as HTML string for streaming."""
-        return self.map_obj._repr_html_()
-    
+        print("Deck.gl map created successfully")
+        return self.deck
+
     def save_map(self, filename: str = None):
-        """Save the map to an HTML file."""
-        if filename is None:
-            filename = f"tree_map.html"
-        
-        # Ensure filename has .html extension
-        if not filename.endswith('.html'):
-            filename += '.html'
-        
-        # Save the map
-        self.map_obj.save(filename)
-        print(f"Map saved to: {filename}")
-        return filename
+        """Save the map to an HTML file with custom layer + basemap controls."""
+        try:
+            if filename is None:
+                filename = "tree_map_deckgl.html"
+            
+            if not filename.endswith('.html'):
+                filename += '.html'
+            
+            print(f"Saving Deck.gl map to {filename}...")
+            
+            # Save base map
+            self.deck.to_html(filename, open_browser=False)
+            
+            # Read HTML
+            with open(filename, 'r', encoding='utf-8') as f:
+                html_content = f.read()
+            
+            
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+            
+            print(f"Map saved to: {filename}")
+            return filename
+        except Exception as e:
+            print(f"Error saving map: {e}")
+            raise
     
-    def run(self, distance_threshold: float = 3.0, save_map: bool = True):
+
+    def run(self, distance_threshold: float = 3.0, save_map: bool = True, show_connections: bool = None):
         """
         Run the complete plotting pipeline.
         
         Args:
             distance_threshold: Distance threshold for duplicate removal in meters
             save_map: Whether to save the map to HTML file
+            show_connections: Whether to show connection lines (overrides instance setting)
         """
+        # Update show_connections if provided
+        if show_connections is not None:
+            self.show_connections = show_connections
+            
         try:
             # Load data
             self.load_data()
@@ -292,16 +386,24 @@ class TreeStreetViewPlotter:
                 return None
             
             # Create map
-            self.map_obj = self.create_map()
+            print("Starting Deck.gl map creation...")
+            deck_map = self.create_map()
+            print("Deck.gl map object created successfully")
             
             # Save map
             if save_map:
+                print("Starting map save...")
                 saved_file = self.save_map()
                 print(f"Map saved to: {saved_file}")
             
-            print(f"\nMap created successfully!")
+            print(f"\nDeck.gl map created successfully!")
+            print(f"Total trees displayed: {len(self.cleaned_tree_data)}")
+            print(f"Total street views displayed: {len(self.streetview_data)}")
+            if self.show_connections:
+                connection_count = len(self._prepare_connection_data())
+                print(f"Total connections displayed: {connection_count}")
             
-            return self.map_obj
+            return deck_map
             
         except Exception as e:
             print(f"Error: {e}")
@@ -309,15 +411,19 @@ class TreeStreetViewPlotter:
 
 def main():
     """Main function to run the plotter from command line."""
-    parser = argparse.ArgumentParser(description='Plot trees and street views on interactive map')
+    parser = argparse.ArgumentParser(description='Plot trees and street views on interactive Deck.gl map')
     parser.add_argument('--distance-threshold', type=float, default=3.0, 
                        help='Distance threshold for duplicate removal in meters')
     parser.add_argument('--no-save', action='store_true', help='Do not save map to HTML file')
+    parser.add_argument('--no-connections', action='store_true', 
+                       help='Do not show connection lines between trees and street views')
     
     args = parser.parse_args()
     
     # Create and run plotter
-    plotter = TreeStreetViewPlotter()
+    plotter = TreeStreetViewPlotter(
+        show_connections=not args.no_connections
+    )
     
     # Generate the map
     map_obj = plotter.run(
@@ -326,7 +432,7 @@ def main():
     )
     
     if map_obj is not None:
-        print("Map generation completed successfully!")
+        print("Deck.gl map generation completed successfully!")
 
 if __name__ == "__main__":
     main()

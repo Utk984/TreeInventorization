@@ -43,6 +43,14 @@ async def fetch_pano_by_id(pano_id: str, session: ClientSession, max_retries: in
             if attempt < max_retries - 1:
                 await asyncio.sleep(1 * (attempt + 1))  # Exponential backoff
                 continue
+        except ValueError as e:
+            if "invalid literal for int() with base 2" in str(e):
+                logger.warning(f"🔧 Binary parsing error for {pano_id} (attempt {attempt + 1}/{max_retries}): Corrupted panorama data")
+            else:
+                logger.warning(f"❌ ValueError fetching panorama {pano_id} (attempt {attempt + 1}/{max_retries}): {str(e)}")
+            if attempt < max_retries - 1:
+                await asyncio.sleep(1 * (attempt + 1))  # Exponential backoff
+                continue
         except Exception as e:
             logger.warning(f"❌ Error fetching panorama {pano_id} (attempt {attempt + 1}/{max_retries}): {str(e)}")
             if attempt < max_retries - 1:
@@ -57,6 +65,7 @@ async def fetch_panoramas_batch(pano_ids: list, session: ClientSession, batch_si
     logger.info(f"🔄 Fetching {len(pano_ids)} panoramas in batches of {batch_size}")
     
     all_panoramas = {}
+    problematic_panos = []
     batch_start = 0
     
     while batch_start < len(pano_ids):
@@ -81,9 +90,11 @@ async def fetch_panoramas_batch(pano_ids: list, session: ClientSession, batch_si
             if isinstance(result, Exception):
                 logger.error(f"❌ Failed to fetch {pano_id}: {result}")
                 all_panoramas[pano_id] = None
+                problematic_panos.append(pano_id)
             elif result[0] is None or result[1] is None:
                 logger.warning(f"⚠️ No data for {pano_id}")
                 all_panoramas[pano_id] = None
+                problematic_panos.append(pano_id)
             else:
                 pano, image = result
                 all_panoramas[pano_id] = (pano, image)
@@ -93,6 +104,10 @@ async def fetch_panoramas_batch(pano_ids: list, session: ClientSession, batch_si
         logger.info(f"✅ Batch completed in {batch_time:.2f}s - {successful}/{len(batch_ids)} successful")
         
         batch_start = batch_end
+    
+    # Log summary of problematic panoramas
+    if problematic_panos:
+        logger.warning(f"⚠️ {len(problematic_panos)} panoramas had issues: {problematic_panos[:5]}{'...' if len(problematic_panos) > 5 else ''}")
     
     return all_panoramas
 

@@ -9,14 +9,10 @@ import json
 import csv
 import asyncio
 import aiohttp
-from typing import List, Tuple, Optional, Set
+from typing import List, Tuple
 from pathlib import Path
 import logging
-from concurrent.futures import ThreadPoolExecutor
 import time
-import sys
-from shapely.geometry import Point, Polygon
-from shapely.prepared import prep
 
 try:
     from streetlevel import streetview
@@ -99,7 +95,7 @@ class StreetViewFetcher:
     def _sample_polygon_coordinates(self, coords: List[List[float]], density: float) -> List[Tuple[float, float]]:
         """Sample coordinates from a polygon with given density.
         
-        For coverage tiles (150x150m), density of 0.00135 degrees ≈ 150m spacing.
+        For ~25m² tiles (5m x 5m), density of 0.000225 degrees ≈ 5m spacing.
         This ensures each sampled point corresponds to a unique coverage tile.
         """
         if len(coords) < 3:
@@ -387,278 +383,8 @@ class StreetViewFetcher:
         print(f"{'='*60}")
 
 
-class NeighborDiscovery:
-    """Fast recursive neighbor discovery with maximum threading."""
-    
-    def __init__(self, geojson_path: str = None, max_workers: int = 100):
-        """
-        Initialize the neighbor discovery system.
-        
-        Args:
-            geojson_path: Path to GeoJSON file for boundary checking
-            max_workers: Maximum number of concurrent workers for speed
-        """
-        self.geojson_path = geojson_path
-        self.max_workers = max_workers
-        self.boundary_polygons = []
-        self.prepared_polygons = []
-        self.all_pano_ids = set()  # Track all pano_ids we've seen
-        
-    def load_panoramas(self, csv_path: str) -> List[dict]:
-        """Load panoramas from CSV file."""
-        print(f"📁 Loading panoramas from {csv_path}...")
-        
-        panoramas = []
-        with open(csv_path, 'r', newline='', encoding='utf-8') as csvfile:
-            reader = csv.DictReader(csvfile)
-            for row in reader:
-                pano_id = row['pano_id']
-                lat = float(row['lat'])
-                lng = float(row['lng'])
-                
-                panoramas.append({
-                    'lat': lat,
-                    'lng': lng,
-                    'pano_id': pano_id
-                })
-                self.all_pano_ids.add(pano_id)
-        
-        print(f"✅ Loaded {len(panoramas)} panoramas")
-        return panoramas
-    
-    def load_boundary_polygons(self):
-        """Load and prepare GeoJSON boundary polygons for fast point-in-polygon checks."""
-        if not self.geojson_path or not Path(self.geojson_path).exists():
-            print("⚠️  No GeoJSON boundary file provided - skipping boundary checks")
-            return
-        
-        print(f"🗺️  Loading boundary polygons from {self.geojson_path}...")
-        
-        with open(self.geojson_path, 'r') as f:
-            geojson_data = json.load(f)
-        
-        for feature in geojson_data['features']:
-            if feature['geometry']['type'] == 'Polygon':
-                coords = feature['geometry']['coordinates'][0]  # Exterior ring
-                polygon = Polygon(coords)
-                self.boundary_polygons.append(polygon)
-                self.prepared_polygons.append(prep(polygon))
-            elif feature['geometry']['type'] == 'MultiPolygon':
-                for polygon_coords in feature['geometry']['coordinates']:
-                    coords = polygon_coords[0]  # Exterior ring
-                    polygon = Polygon(coords)
-                    self.boundary_polygons.append(polygon)
-                    self.prepared_polygons.append(prep(polygon))
-        
-        print(f"✅ Loaded {len(self.boundary_polygons)} boundary polygons")
-    
-    def is_within_boundary(self, lat: float, lng: float) -> bool:
-        """Check if a point is within the boundary polygons."""
-        if not self.prepared_polygons:
-            return True  # No boundary restrictions
-        
-        point = Point(lng, lat)  # Note: Point takes (x, y) = (lng, lat)
-        
-        for prepared_polygon in self.prepared_polygons:
-            if prepared_polygon.contains(point):
-                return True
-        
-        return False
-    
-    async def fetch_neighbors_async(self, session: aiohttp.ClientSession, pano_id: str) -> List[dict]:
-        """Fetch neighbors for a given panorama ID asynchronously."""
-        try:
-            # Get panorama details first to access neighbors
-            pano = await streetview.find_panorama_by_id_async(pano_id, session, download_depth=False)
-            if not pano or not pano.neighbors:
-                return []
-            
-            valid_neighbors = []
-            for neighbor in pano.neighbors:
-                neighbor_id = neighbor.id
-                neighbor_lat = neighbor.lat
-                neighbor_lng = neighbor.lon
-                
-                # Skip if already exists
-                if neighbor_id in self.all_pano_ids:
-                    continue
-                
-                # Check if within boundary
-                if not self.is_within_boundary(neighbor_lat, neighbor_lng):
-                    continue
-                
-                valid_neighbors.append({
-                    'lat': neighbor_lat,
-                    'lng': neighbor_lng,
-                    'pano_id': neighbor_id
-                })
-                self.all_pano_ids.add(neighbor_id)
-            
-            return valid_neighbors
-            
-        except Exception as e:
-            logger.debug(f"Failed to fetch neighbors for {pano_id}: {e}")
-            return []
-    
-    def save_to_csv(self, panoramas: List[dict], output_path: str):
-        """Save panoramas to CSV file."""
-        with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
-            fieldnames = ['lat', 'lng', 'pano_id']
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(panoramas)
-    
-
-    async def discover_neighbors(self, csv_path: str, output_path: str = None) -> List[dict]:
-        """Ultra-fast recursive neighbor discovery - only processes NEW panoramas each iteration."""
-        print(f"\n{'='*60}")
-        print(f"🚀 ULTRA-FAST RECURSIVE NEIGHBOR DISCOVERY")
-        print(f"{'='*60}")
-        
-        # Load existing panoramas
-        panoramas = self.load_panoramas(csv_path)
-        
-        # Load boundary polygons
-        self.load_boundary_polygons()
-        
-        # Set output path
-        if output_path is None:
-            output_path = csv_path.replace('.csv', '_with_neighbors.csv')
-        
-        print(f"🚀 Starting with {len(panoramas)} panoramas...")
-        print(f"⚡ Using {self.max_workers} concurrent workers for maximum speed...")
-        
-        # Process panoramas until no new neighbors are found
-        all_panoramas = panoramas.copy()
-        processed_pano_ids = set()  # Track which pano_ids we've already processed
-        iteration = 0
-        
-        # Add initial panoramas to processed set
-        for pano in panoramas:
-            processed_pano_ids.add(pano['pano_id'])
-        
-        async with aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(
-                limit=200,           # High connection pool
-                limit_per_host=100, # High per-host limit
-                ttl_dns_cache=300,
-                use_dns_cache=True
-            ),
-            timeout=aiohttp.ClientTimeout(
-                total=30,
-                connect=10,
-                sock_read=10
-            )
-        ) as session:
-            
-            # Create semaphore for concurrency control
-            semaphore = asyncio.Semaphore(self.max_workers)
-            
-            async def fetch_with_semaphore(pano_id):
-                async with semaphore:
-                    return await self.fetch_neighbors_async(session, pano_id)
-            
-            while True:
-                iteration += 1
-                
-                # Get ONLY NEW panoramas to process in this iteration
-                new_panoramas = [pano for pano in all_panoramas if pano['pano_id'] not in processed_pano_ids]
-                
-                if not new_panoramas:
-                    print(f"   🎯 No new panoramas to process - stopping recursion")
-                    break
-                
-                print(f"\n🔄 Iteration {iteration} - Processing {len(new_panoramas)} NEW panoramas...")
-                print(f"   📊 Total panoramas so far: {len(all_panoramas)}")
-                
-                new_neighbors_found = 0
-                
-                # Process in parallel batches for maximum speed
-                batch_size = self.max_workers * 2
-                
-                for i in range(0, len(new_panoramas), batch_size):
-                    batch = new_panoramas[i:i + batch_size]
-                    
-                    # Create tasks for this batch
-                    tasks = [fetch_with_semaphore(pano['pano_id']) for pano in batch]
-                    
-                    # Execute batch in parallel
-                    batch_results = await asyncio.gather(*tasks, return_exceptions=True)
-                    
-                    # Process results
-                    for j, result in enumerate(batch_results):
-                        pano_id = batch[j]['pano_id']
-                        processed_pano_ids.add(pano_id)  # Mark as processed
-                        
-                        if isinstance(result, list):
-                            for neighbor in result:
-                                all_panoramas.append(neighbor)
-                                new_neighbors_found += 1
-                        elif isinstance(result, Exception):
-                            logger.debug(f"Task failed for {pano_id}: {result}")
-                    
-                    # Show progress
-                    if (i + batch_size) % (batch_size * 5) == 0 or i + batch_size >= len(new_panoramas):
-                        print(f"   🔄 Processed {min(i + batch_size, len(new_panoramas))}/{len(new_panoramas)} | Total: {len(all_panoramas)}")
-                
-                print(f"   ✅ Found {new_neighbors_found} new neighbors in iteration {iteration}")
-                
-                # If no new neighbors found, we're done
-                if new_neighbors_found == 0:
-                    print(f"   🎯 No new neighbors found - stopping recursion")
-                    break
-        
-        # Save all panoramas to CSV
-        print(f"\n💾 Saving {len(all_panoramas)} panoramas to {output_path}...")
-        self.save_to_csv(all_panoramas, output_path)
-        
-        # Final statistics
-        total_new_neighbors = len(all_panoramas) - len(panoramas)
-        print(f"\n📈 Results:")
-        print(f"   🎯 Original Panoramas: {len(panoramas)}")
-        print(f"   🔍 Total New Neighbors Found: {total_new_neighbors}")
-        print(f"   📊 Total Panoramas: {len(all_panoramas)}")
-        print(f"   🔄 Iterations: {iteration}")
-        print(f"   📁 Output File: {output_path}")
-        
-        return all_panoramas
-
-
-async def main_neighbor_discovery():
-    """Ultra-fast recursive neighbor discovery."""
-    
-    # File paths
-    csv_path = "streetviews/south_delhi.csv"
-    geojson_path = "streetviews/South Delhi.geojson"
-    output_path = "streetviews/south_delhi_with_neighbors.csv"
-    
-    # Check if CSV exists
-    if not Path(csv_path).exists():
-        print(f"❌ Error: CSV file not found at {csv_path}")
-        return
-    
-    # Create ultra-fast neighbor discovery
-    discovery = NeighborDiscovery(geojson_path=geojson_path, max_workers=100)
-    
-    try:
-        # Discover neighbors recursively
-        all_panoramas = await discovery.discover_neighbors(
-            csv_path=csv_path,
-            output_path=output_path
-        )
-        
-        print(f"\n{'='*60}")
-        print(f"🎉 ULTRA-FAST NEIGHBOR DISCOVERY COMPLETED!")
-        print(f"📊 Total panoramas: {len(all_panoramas)}")
-        print(f"📁 Results saved to {output_path}")
-        print(f"{'='*60}")
-        
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        return
-
 async def main():
-    """Fetch street views for South Delhi."""
+    """Main function to fetch street views from GeoJSON."""
     
     # File paths
     geojson_path = "streetviews/South Delhi.geojson"
@@ -669,31 +395,21 @@ async def main():
         print(f"❌ Error: GeoJSON file not found at {geojson_path}")
         return
     
-    # Create fetcher with ULTRA-FAST settings
-    # Using maximum workers for fastest processing
+    # Create fetcher
     fetcher = StreetViewFetcher(max_workers=100, radius=50)
     
     try:
-        # Process the GeoJSON with ULTRA-FAST sampling density for coverage tiles
-        # Coverage tiles are 150x150 meters, so we sample every ~300m for speed
+        # Process the GeoJSON
         await fetcher.process_geojson(
             geojson_path=geojson_path,
             output_path=output_path,
-            sample_density=0.0001  # ~150 meters between samples (matches tile size)
+            sample_density=0.00045  # ~25m² tile size (5m x 5m spacing)
         )
         
     except Exception as e:
         print(f"❌ Error: {e}")
         return
 
-if __name__ == "__main__":
-    import sys
-    
-    # Check command line arguments
-    if len(sys.argv) > 1 and sys.argv[1] == "neighbors":
-        print("🚀 Running Ultra-Fast Recursive Neighbor Discovery...")
-        asyncio.run(main_neighbor_discovery())
-    else:
-        print("🚀 Running Street View Fetch Mode...")
-        asyncio.run(main())
 
+if __name__ == "__main__":
+    asyncio.run(main())
