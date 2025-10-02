@@ -40,8 +40,7 @@ async def inventorize(config: Config, tree_model, max_concurrent=3, chunk_size=1
             # Initialize CSV file with headers
             empty_df = pd.DataFrame(columns=[
                 'image_path', 'pano_id', 'stview_lat', 'stview_lng', 
-                'tree_lat_model', 'tree_lng_model', 'tree_lat', 'tree_lng',
-                'image_x', 'image_y', 'theta', 'conf', 'distance_model', 'distance_pano'
+                'tree_lat', 'tree_lng', 'image_x', 'image_y', 'theta', 'conf', 'distance_pano'
             ])
             empty_df.to_csv(config.OUTPUT_CSV, index=False)
             logger.info(f"✅ CSV headers initialized: {config.OUTPUT_CSV}")
