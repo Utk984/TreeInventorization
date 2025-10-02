@@ -60,18 +60,14 @@ def process_view(config: Config, view, tree_data, pano, image, theta, i):
                             continue
                         
                         # Create local frame for coordinate transformation
-                        lat_pano, lon_pano = localize_pixel_with_depth(pano, u, v, W, H, distance_pano)
-
-                        # Use pano depth directly (no depth model)
-                        distance_calibrated = distance_pano
-                        lat_model, lon_model = lat_pano, lon_pano
-                        
+                        lat_pano, lon_pano = localize_pixel_with_depth(pano, u, v, W, H, distance_pano)                        
                         logger.info(f"Pano distance: {distance_pano:.2f}m")
                         
                         # Submit image creation to thread pool
-                        # IO_EXECUTOR.submit(
-                        #     make_image, view, boxes[k], mask, image_path
-                        # )
+                        if config.SAVE_VIEWS:
+                            IO_EXECUTOR.submit(
+                                make_image, view, boxes[k], mask, image_path
+                            )
                         
                     except Exception as e:
                         logger.error(f"❌ Error processing tree {k} in view {i}: {e}")
@@ -82,15 +78,12 @@ def process_view(config: Config, view, tree_data, pano, image, theta, i):
                         "pano_id": pano.id,
                         "stview_lat": pano.lat,
                         "stview_lng": pano.lon,
-                        "tree_lat_model": lat_model,
-                        "tree_lng_model": lon_model,
                         "tree_lat": lat_pano,
                         "tree_lng": lon_pano,
                         "image_x": float(u),
                         "image_y": float(v),
                         "theta": theta,
                         "conf": conf,
-                        "distance_model": distance_calibrated,
                         "distance_pano": distance_pano,
                     }
                     trees.append(tree)
@@ -205,13 +198,16 @@ async def process_single_panorama(pano_id: str, pano, image, config: Config, tre
                 logger.debug(f"💾 Saving full panorama with masks: {pano.id}")
                 full = add_masks(image.copy(), df_part.copy(), config.HEIGHT, config.WIDTH, config.FOV, mask_json_path)
                 full_path = os.path.join(config.FULL_DIR, f"{pano.id}.jpg")
-                cv2.imwrite(full_path, full)
+                # Convert RGB to BGR for OpenCV imwrite
+                full_bgr = cv2.cvtColor(full, cv2.COLOR_RGB2BGR)
+                cv2.imwrite(full_path, full_bgr)
                 logger.debug(f"✅ Full Panorama saved: {full_path}")
                 
                 if not config.SAVE_MASK_JSON and mask_json_path:
                     os.remove(mask_json_path)
 
-            # IO_EXECUTOR.submit(_save_full)
+            if config.SAVE_FULL:
+                IO_EXECUTOR.submit(_save_full)
 
             # Remove exact duplicates before saving
             df_part = df_part.drop_duplicates()

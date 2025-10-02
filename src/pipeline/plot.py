@@ -34,7 +34,6 @@ class TreeStreetViewPlotter:
         print("Loading data...")
         self.tree_data = pd.read_csv(self.config.OUTPUT_CSV)
         # keep the rows where distance_pano < 12
-        self.tree_data = self.tree_data[self.tree_data['distance_pano'] < 12]
         
         # Load all street view data
         self.streetview_data = pd.read_csv(self.config.PANORAMA_CSV)

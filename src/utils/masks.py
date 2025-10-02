@@ -261,7 +261,9 @@ def make_image(view, box, mask, image_path):
         cv2.addWeighted(overlay, 0.3, im, 0.7, 0, im)
         cv2.polylines(im, [mask_points], isClosed=True, color=(0, 255, 0), thickness=1)
 
-        cv2.imwrite(image_path, im)
+        # Convert RGB to BGR for OpenCV imwrite
+        im_bgr = cv2.cvtColor(im, cv2.COLOR_RGB2BGR)
+        cv2.imwrite(image_path, im_bgr)
         
         save_time = time.time() - start_time
         logger.debug(f"✅ Tree image saved in {save_time:.3f}s: {image_path}")

@@ -42,7 +42,7 @@ class Config:
 
         # Model config
         self.TREE_MODEL_PATH = os.path.join(
-            self.ROOT_DIR, "models", "TreeModelV3", "weights", "best.pt"
+            self.ROOT_DIR, "models", "TreeMovelV3", "weights", "best.pt"
         )
 
         self.DEPTH_MODEL_PATH = os.path.join(
@@ -65,10 +65,10 @@ class Config:
         ### EDITABLE SETTINGS ###
         
         # Panorama CSV input
-        self.PANORAMA_CSV = os.path.join(self.STREETVIEW_DIR, "south_delhi.csv")
+        self.PANORAMA_CSV = os.path.join(self.STREETVIEW_DIR, "chandigarh_streets.csv")
 
         # Output CSV
-        self.OUTPUT_CSV = os.path.join(self.OUTPUT_DIR, "south_delhi_trees.csv")
+        self.OUTPUT_CSV = os.path.join(self.OUTPUT_DIR, "chandigarh_trees_2.csv")
 
         # Max concurrent
         self.MAX_CONCURRENT = 3
@@ -82,5 +82,7 @@ class Config:
         # Save data
         self.SAVE_DEPTH_MAPS = False
         self.SAVE_MASK_JSON = True
+        self.SAVE_VIEWS = True
+        self.SAVE_FULL = True
         
         ### END EDITABLE SETTINGS ###
