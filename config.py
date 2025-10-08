@@ -42,7 +42,7 @@ class Config:
 
         # Model config
         self.TREE_MODEL_PATH = os.path.join(
-            self.ROOT_DIR, "models", "TreeMovelV3", "weights", "best.pt"
+            self.ROOT_DIR, "models", "TreeModelV3", "weights", "best.pt"
         )
 
         self.DEPTH_MODEL_PATH = os.path.join(
